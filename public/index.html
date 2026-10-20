@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
 <meta name="author" content="Designed and built by Claude (Anthropic) with Dave">
 <title>The Long Campaign</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,7 +82,8 @@ function showLinks(j, title) {
 document.getElementById('go').onclick = async () => {
   const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Surveying the country…';
   const body = { ...pick, name: document.getElementById('name').value, seed: document.getElementById('seed').value || undefined };
-  const r = await fetch('/api/campaigns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const key = location.pathname.split('/').filter(Boolean)[0] || '';
+  const r = await fetch('/api/campaigns', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Organiser-Key': key }, body: JSON.stringify(body) });
   const j = await r.json(); b.disabled = false; b.textContent = 'Raise the armies';
   if (!r.ok) { document.getElementById('out').textContent = j.error; return; }
   history.replaceState(null, '', '/admin/' + j.admin); adminTok = j.admin;

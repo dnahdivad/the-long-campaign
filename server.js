@@ -97,23 +97,49 @@ async function tickCampaign(id) {
 
 /* ---------------- http ---------------- */
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json' };
-function send(res, code, body, type) { res.writeHead(code, { 'Content-Type': type || 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); }
+// a secret word for the organiser's front page; without it the site shows nothing but "Not Found"
+const ORGANISER_KEY = (process.env.ORGANISER_KEY || '').trim();
+const ROBOTS = { 'X-Robots-Tag': 'noindex, nofollow, noarchive' };
+function send(res, code, body, type) { res.writeHead(code, { 'Content-Type': type || 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...ROBOTS }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); }
 function readBody(req) { return new Promise((ok, bad) => { let b = ''; req.on('data', c => { b += c; if (b.length > 2e5) { bad(new Error('too large')); req.destroy(); } }); req.on('end', () => { try { ok(b ? JSON.parse(b) : {}); } catch (e) { bad(e); } }); }); }
 function serveFile(res, rel) {
   const f = path.join(__dirname, 'public', rel); if (!f.startsWith(path.join(__dirname, 'public'))) return send(res, 404, 'Not found', 'text/plain');
-  fs.readFile(f, (err, data) => { if (err) return send(res, 404, 'Not found', 'text/plain'); res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'public, max-age=300' }); res.end(data); });
+  fs.readFile(f, (err, data) => { if (err) return send(res, 404, 'Not found', 'text/plain'); res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'public, max-age=300', ...ROBOTS }); res.end(data); });
 }
+// what a stranger sees: the plainest possible empty server
+const notFound = res => send(res, 404, '<!doctype html><title>404 Not Found</title><h1>Not Found</h1><p>The requested URL was not found on this server.</p>', 'text/html; charset=utf-8');
+// the front page, with the solo link pointed at the secret address (or removed on the organiser's page)
+function serveFront(res, soloHref) {
+  fs.readFile(path.join(__dirname, 'public', 'index.html'), 'utf8', (err, html) => {
+    if (err) return notFound(res);
+    html = soloHref ? html.replace('href="/solo"', `href="${soloHref}"`) : html.replace(/\s*<p><a href="\/solo">[^<]*<\/a><\/p>/, '');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...ROBOTS }); res.end(html);
+  });
+}
+function serveSolo(res) { fs.readFile(path.join(__dirname, 'dist', 'the-long-campaign-solo.html'), (err, data) => err ? notFound(res) : (res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300', ...ROBOTS }), res.end(data))); }
+const keyOk = k => !ORGANISER_KEY || k === ORGANISER_KEY;
 const server = http.createServer(async (req, res) => {
   try {
     const u = new URL(req.url, 'http://x'), p = u.pathname;
-    if (req.method === 'GET' && (p === '/' || p === '/index.html')) return serveFile(res, 'index.html');
-    if (req.method === 'GET' && p.startsWith('/play/')) return serveFile(res, 'play.html');
-    if (req.method === 'GET' && p.startsWith('/admin/')) return serveFile(res, 'index.html');
-    if (req.method === 'GET' && (p === '/solo' || p === '/solo/')) return fs.readFile(path.join(__dirname, 'dist', 'the-long-campaign-solo.html'), (err, data) => err ? send(res, 404, 'Not found', 'text/plain') : (res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' }), res.end(data)));
+    if (req.method === 'GET' && p === '/robots.txt') return send(res, 200, 'User-agent: *\nDisallow: /\n', 'text/plain');
     if (req.method === 'GET' && p === '/health') return send(res, 200, { ok: true });
+    // the front page and the solo game: open to all only when no organiser key is set
+    if (req.method === 'GET' && !ORGANISER_KEY && (p === '/' || p === '/index.html')) return serveFront(res, '/solo');
+    if (req.method === 'GET' && !ORGANISER_KEY && (p === '/solo' || p === '/solo/')) return serveSolo(res);
+    if (req.method === 'GET' && ORGANISER_KEY && (p === '/' + ORGANISER_KEY || p === '/' + ORGANISER_KEY + '/')) return serveFront(res, '/' + ORGANISER_KEY + '/solo');
+    if (req.method === 'GET' && ORGANISER_KEY && p === '/' + ORGANISER_KEY + '/solo') return serveSolo(res);
+    // a player's or organiser's page: only for a link that really exists
+    let pm = p.match(/^\/(play|admin)\/([\w.-]+)$/);
+    if (req.method === 'GET' && pm) {
+      const doc = await Store.get(gameIdOf(pm[2])).catch(() => null);
+      if (!doc) return notFound(res);
+      if (pm[1] === 'play') return doc.tokens.includes(pm[2]) ? serveFile(res, 'play.html') : notFound(res);
+      return doc.admin === pm[2] ? serveFront(res, null) : notFound(res);
+    }
     if (p === '/cron') { if (CRON_KEY && u.searchParams.get('key') !== CRON_KEY) return send(res, 403, { error: 'bad key' }); const ids = await Store.list(); let n = 0; for (const id of ids) { const before = await Store.get(id); const after = await tickCampaign(id); if (before && after && after.state.turn !== before.state.turn) n++; } return send(res, 200, { checked: ids.length, resolved: n }); }
     // create a campaign
     if (req.method === 'POST' && p === '/api/campaigns') {
+      if (!keyOk(req.headers['x-organiser-key'] || '')) return notFound(res);
       const body = await readBody(req); const doc = await createCampaign(body);
       return send(res, 200, { id: doc.id, admin: doc.admin, adminUrl: `${PUBLIC_URL}/admin/${doc.admin}`, links: links(doc) });
     }
@@ -151,8 +177,8 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, view(doc0, seat));
     }
     // static files
-    if (req.method === 'GET') return serveFile(res, p.slice(1));
-    send(res, 405, { error: 'Method not allowed' });
+    if (req.method === 'GET' && /\.(js|css|png|svg|ico)$/.test(p)) return serveFile(res, p.slice(1));
+    notFound(res);
   } catch (e) { console.error(e); send(res, e.code === 409 ? 409 : 400, { error: e.message || 'Something went wrong' }); }
 });
 function view(doc, seat) { const v = E.view(doc.state, seat); v.deadline = doc.deadline; v.hours = doc.hours; v.status = doc.status; v.myOrders = doc.orders[seat] || null; v.submittedSeats = doc.state.seats.map(s => s.bot || !!doc.orders[s.seat]); return v; }
