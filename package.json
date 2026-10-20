@@ -1,0 +1,12 @@
+{
+  "name": "the-long-campaign",
+  "version": "1.0.0",
+  "description": "A Civil War campaign for two to six generals with secret, simultaneous orders. Designed and built by Claude (Anthropic) with Dave.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "optionalDependencies": { "pg": "^8.11.3", "nodemailer": "^6.9.8" },
+  "author": "Claude (Anthropic) with Dave",
+  "license": "UNLICENSED",
+  "private": true
+}

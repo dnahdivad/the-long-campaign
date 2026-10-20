@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="Designed and built by Claude (Anthropic) with Dave">
+<title>The Long Campaign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Rye&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head><body>
+<div class="front">
+  <h1>The Long Campaign</h1>
+  <div class="lede">A Civil War campaign for two to six generals. Secret orders, simultaneous turns, and alliances that last exactly as long as they are useful.</div>
+  <div class="grid">
+    <div class="card" id="create">
+      <h2>Raise a new campaign</h2>
+      <div class="field"><span>Name</span><input id="name" value="The Long Campaign" maxlength="60"></div>
+      <div class="field"><span>Armies</span><div class="seg" data-k="seats"></div></div>
+      <div class="field"><span>Human players</span><div class="seg" data-k="humans"></div></div>
+      <div class="field"><span>Map size</span><div class="seg" data-k="mapSize"></div></div>
+      <div class="field"><span>Woods and hills</span><div class="seg" data-k="terrain"></div></div>
+      <div class="field"><span>Towns</span><div class="seg" data-k="towns"></div></div>
+      <div class="field"><span>Rivers</span><div class="seg" data-k="rivers"></div></div>
+      <div class="field"><span>Victory</span><div class="seg" data-k="mode"></div></div>
+      <div class="field"><span>Length</span><div class="seg" data-k="turnLimit"></div></div>
+      <div class="field"><span>A turn every</span><div class="seg" data-k="hours"></div></div>
+      <div class="field"><span>Map seed</span><input id="seed" placeholder="leave blank for a new map" inputmode="numeric"></div>
+      <button class="primary" id="go">Raise the armies</button>
+      <div id="out"></div>
+    </div>
+    <div class="card">
+      <h2>How it plays</h2>
+      <ul class="features">
+        <li>Everyone writes orders in secret. When the deadline comes — or as soon as every general has sent orders — the month is fought all at once.</li>
+        <li>Take towns for recruits, hold farms and railways for supply, and raise infantry, cavalry, artillery, engineers and a general.</li>
+        <li>Make deals on WhatsApp. On the map you can support another army's attack, share your scouts' reports, grant free passage or send supplies — and take any of it back next month.</li>
+        <li>Each general has secret orders worth points at the end. Nobody knows who is really winning.</li>
+        <li>Every map is new and fair: the board is built in identical slices, one per army, with the richest ground in the middle.</li>
+        <li>Weather fronts cross the map: rain floods the fords, fog blinds the scouts, snow starves armies out of supply.</li>
+      </ul>
+      <p class="small">Empty seats are taken by computer generals, so you can play two humans against four, or one against the lot.</p>
+      <p><a href="/solo">Play solo in your browser →</a></p>
+    </div>
+  </div>
+  <div class="foot">Designed and built by Claude (Anthropic) with Dave</div>
+</div>
+<script>
+const OPTS = {
+  seats: [[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']], humans: [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']],
+  mapSize: [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], terrain: [['light', 'Light'], ['normal', 'Normal'], ['heavy', 'Heavy']], towns: [['few', 'Few'], ['normal', 'Normal'], ['many', 'Many']], rivers: [[0, 'None'], [1, 'One'], [2, 'Two']],
+  mode: [['points', 'Victory points'], ['capital', 'Take the Capital'], ['conquest', 'Last army standing']], turnLimit: [[20, '20 months'], [30, '30 months'], [40, '40 months']],
+  hours: [[1, '1 hour'], [6, '6 hours'], [12, '12 hours'], [24, 'Day']]
+};
+const pick = { seats: 4, humans: 4, mapSize: 'normal', terrain: 'normal', towns: 'normal', rivers: 1, mode: 'points', turnLimit: 30, hours: 12 };
+function render() {
+  document.querySelectorAll('.seg').forEach(seg => {
+    const k = seg.dataset.k; seg.innerHTML = '';
+    for (const [v, t] of OPTS[k]) { if (k === 'humans' && v > pick.seats) continue; const b = document.createElement('button'); b.textContent = t; if (pick[k] === v) b.className = 'on'; b.onclick = () => { pick[k] = v; if (pick.humans > pick.seats) pick.humans = pick.seats; render(); }; seg.append(b); }
+  });
+}
+render();
+const copy = (t, b) => { navigator.clipboard && navigator.clipboard.writeText(t).then(() => { b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1500); }); };
+function showLinks(j, title) {
+  const out = document.getElementById('out'); out.innerHTML = '';
+  const base = location.origin;
+  if (j.adminUrl && !/^https?:/.test(j.adminUrl)) j.adminUrl = base + j.adminUrl;
+  const h = document.createElement('div'); h.innerHTML = `<h2 style="margin-top:16px">${title}</h2><p class="small">Send each player their own link: it is their key to their army, so keep it private. Your organiser's page (bookmark it): <a href="${j.adminUrl || location.href}">${(j.adminUrl || location.href).replace(/^https?:\/\//, '')}</a></p>`;
+  out.append(h);
+  const box = document.createElement('div'); box.className = 'links';
+  const colors = { Blue: '#3a5cc0', Grey: '#7d7e78', Crimson: '#c0392b', Green: '#3e8a34', Butternut: '#c8962a', Purple: '#7c46a8' };
+  for (const l of j.links) {
+    const url = !l.url ? '' : l.url.startsWith('http') ? l.url : base + l.url;
+    const row = document.createElement('div'); row.className = 'link'; row.style.setProperty('--c', colors[l.color] || '#888');
+    row.innerHTML = `<b>${l.color}${l.bot ? ' (computer)' : ''}</b>${l.bot ? '<span class="small">Played by the computer</span><span></span>' : `<code>${url}</code>`}`;
+    if (!l.bot) { const b = document.createElement('button'); b.textContent = 'Copy'; b.onclick = () => copy(url, b); row.append(b); }
+    box.append(row);
+  }
+  out.append(box);
+  if (j.status !== undefined) { const p = document.createElement('p'); p.className = 'small'; p.innerHTML = `${j.date} (turn ${j.turn}) · ${j.status === 'over' ? 'the war is over' : 'orders in from ' + j.submitted.filter(Boolean).length + ' of ' + j.submitted.length + ' · next turn by ' + new Date(j.deadline).toLocaleString()}`; out.append(p); if (j.status === 'active') { const b = document.createElement('button'); b.textContent = 'Fight this turn now'; b.onclick = async () => { b.disabled = true; await fetch('/api/admin/' + adminTok + '/resolve', { method: 'POST' }); loadAdmin(); }; out.append(b); } }
+}
+document.getElementById('go').onclick = async () => {
+  const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Surveying the country…';
+  const body = { ...pick, name: document.getElementById('name').value, seed: document.getElementById('seed').value || undefined };
+  const r = await fetch('/api/campaigns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json(); b.disabled = false; b.textContent = 'Raise the armies';
+  if (!r.ok) { document.getElementById('out').textContent = j.error; return; }
+  history.replaceState(null, '', '/admin/' + j.admin); adminTok = j.admin;
+  showLinks(j, 'The armies are raised');
+};
+let adminTok = location.pathname.startsWith('/admin/') ? location.pathname.split('/').pop() : null;
+async function loadAdmin() { const r = await fetch('/api/admin/' + adminTok); const j = await r.json(); if (!r.ok) { document.getElementById('out').textContent = j.error; return; } j.adminUrl = location.href; showLinks(j, j.name); }
+if (adminTok) loadAdmin();
+</script>
+</body></html>

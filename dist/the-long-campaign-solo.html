@@ -1,0 +1,1407 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="author" content="Designed and built by Claude (Anthropic) with Dave">
+<title>The Long Campaign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Rye&display=swap">
+<style>
+/* The Long Campaign — one look: a field desk at night. Parchment panels on dark wood. */
+:root {
+  --night: #16120c; --wood: #241b12; --ink: #2a1d12; --ink2: #5a4630; --parch: #ecdfbf; --parch2: #e0cfa6; --brass: #c99a2e; --blood: #9a2f22;
+  --f-display: "Rye", Georgia, serif; --f-body: "IM Fell English", Georgia, serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--night); color: var(--parch); font-family: var(--f-body); }
+button { font: inherit; cursor: pointer; border: 1.5px solid var(--ink); background: var(--parch2); color: var(--ink); border-radius: 3px; padding: 7px 11px; font-size: 15px; line-height: 1.15; }
+button:hover:not([disabled]) { background: #f6e7bd; }
+button.on, button.primary, button.on:hover:not([disabled]), button.primary:hover:not([disabled]) { background: #3a2816; color: #f2e7c9; border-color: #17110a; }
+button.primary:hover:not([disabled]) { background: #4a3420; }
+button.primary { font-size: 17px; padding: 10px 16px; }
+button[disabled] { opacity: 0.45; cursor: default; }
+button.ghost { background: transparent; border-color: var(--ink2); }
+input { font: inherit; font-size: 16px; padding: 8px 10px; border: 1.5px solid var(--ink); border-radius: 3px; background: #fbf4e0; color: var(--ink); width: 100%; margin: 4px 0; }
+input[type=number] { width: 64px; display: inline-block; }
+input[type=checkbox] { width: auto; margin: 0 6px 0 0; }
+a { color: var(--brass); }
+.small { font-size: 14px; color: var(--ink2); line-height: 1.35; }
+.hint { font-style: italic; }
+.row { display: flex; gap: 6px; align-items: center; }
+.wrap { flex-wrap: wrap; }
+
+/* the campaign table */
+#app { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr; grid-template-columns: 1fr 360px; }
+#top { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding: 6px 12px; background: var(--parch); color: var(--ink); border-bottom: 2px solid var(--ink); }
+#top .title b { font-family: var(--f-display); font-size: 20px; font-weight: normal; margin-right: 10px; }
+#top .date { font-size: 14px; color: var(--ink2); }
+#top .res { display: flex; gap: 12px; font-size: 16px; }
+#top .wx { display: flex; gap: 4px; }
+.wxchip { padding: 3px 7px; font-size: 14px; }
+.wxchip small { font-size: 11px; color: inherit; opacity: 0.8; }
+#clock { font-size: 14px; color: var(--blood); }
+.players { display: flex; gap: 4px; margin-left: auto; }
+.pdot { width: 22px; height: 22px; border-radius: 50%; background: var(--c); border: 2px solid var(--ink); color: #fff; font-size: 12px; display: grid; place-items: center; }
+.pdot.out { opacity: 0.3; }
+#mapwrap { position: relative; overflow: hidden; background: #18140e; }
+#map { width: 100%; height: 100%; display: block; touch-action: none; cursor: pointer; }
+#side { background: var(--parch); color: var(--ink); border-left: 2px solid var(--ink); display: flex; flex-direction: column; min-height: 0; }
+.tabs { display: flex; gap: 2px; padding: 6px 6px 0; flex-wrap: wrap; }
+.tabs button { padding: 5px 8px; font-size: 14px; border-radius: 3px 3px 0 0; }
+.tabbody { padding: 10px 12px 16px; overflow-y: auto; flex: 1; border-top: 1.5px solid var(--ink); }
+.olist { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; }
+.oline { font-size: 14px; padding: 4px 6px; border-radius: 3px; cursor: pointer; line-height: 1.3; }
+.oline:hover { background: rgba(42, 29, 18, 0.08); }
+.oline i { color: var(--blood); }
+.sw { display: inline-block; width: 10px; height: 10px; background: var(--c); border: 1px solid var(--ink); margin-right: 6px; vertical-align: middle; }
+.submit { position: sticky; bottom: -16px; background: var(--parch); padding: 10px 0 4px; border-top: 1px solid rgba(42, 29, 18, 0.25); }
+.submit button { width: 100%; }
+.army-card { border-left: 6px solid var(--c); padding: 6px 10px; margin: 8px 0; background: rgba(42, 29, 18, 0.05); }
+.army-card .ah { font-size: 15px; }
+.chk { display: flex; align-items: center; font-size: 14px; margin: 4px 0; cursor: pointer; }
+.gift { font-size: 14px; margin-top: 4px; }
+.secret { background: #2a1d12; color: #f2e7c9; padding: 10px 12px; border-radius: 3px; font-size: 16px; }
+.secret .small { color: #d9c491; margin-top: 4px; }
+h4 { font-family: var(--f-display); font-weight: normal; font-size: 16px; margin: 14px 0 4px; }
+.news { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.35; }
+.rules p { margin: 0 0 8px; }
+.over { background: #3a2816; color: #f2e7c9; padding: 10px 12px; border-radius: 3px; margin-bottom: 10px; }
+.over h3 { font-family: var(--f-display); font-weight: normal; margin: 0 0 4px; font-size: 22px; }
+.over .oline { color: #f2e7c9; }
+#unitpanel, #recruit { position: absolute; left: 10px; right: 10px; bottom: 10px; max-width: 760px; background: var(--parch); color: var(--ink); border: 2px solid var(--ink); border-radius: 4px; padding: 8px 10px; display: none; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+.uhead { font-size: 16px; margin-bottom: 2px; }
+#status { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(242, 231, 201, 0.95); color: var(--ink); border: 1.5px solid var(--ink); padding: 6px 12px; border-radius: 3px; font-size: 15px; display: none; max-width: 90%; text-align: center; }
+.zoom { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.zoom button { width: 38px; height: 38px; padding: 0; font-size: 20px; }
+.modalwrap { position: fixed; inset: 0; background: rgba(10, 7, 4, 0.6); display: grid; place-items: center; z-index: 10; padding: 16px; }
+.modal { background: var(--parch); color: var(--ink); border: 2px solid var(--ink); border-radius: 4px; padding: 16px 18px; max-width: 460px; width: 100%; }
+.modal h3 { font-family: var(--f-display); font-weight: normal; margin: 0 0 8px; font-size: 22px; }
+.modal p { font-size: 15px; margin: 0 0 10px; }
+.modal .primary { width: 100%; margin-top: 8px; }
+button.army { border-left: 8px solid var(--c); }
+.credit { position: absolute; left: 10px; top: 10px; font-size: 12px; color: rgba(242, 231, 201, 0.55); pointer-events: none; }
+.fatal { max-width: 520px; margin: 15vh auto; padding: 0 20px; }
+.fatal h2 { font-family: var(--f-display); font-weight: normal; }
+@media (max-width: 1000px) { #app { grid-template-columns: 1fr 300px; } .tabs button { padding: 4px 6px; font-size: 13px; } }
+@media (max-width: 820px) {
+  #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr 42vh; }
+  #mapwrap, #side { grid-column: 1; }
+  #side { border-left: 0; border-top: 2px solid var(--ink); }
+  #top { gap: 4px 10px; }
+  #top .title b { font-size: 17px; }
+  .players { margin-left: 0; }
+}
+
+/* the front page */
+.front { max-width: 980px; margin: 0 auto; padding: 28px 18px 60px; }
+.front h1 { font-family: var(--f-display); font-weight: normal; font-size: clamp(40px, 7vw, 72px); margin: 10px 0 0; color: #f2e3bb; letter-spacing: 1px; }
+.front .lede { font-size: 20px; color: #d9c491; margin: 6px 0 22px; }
+.front .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 22px; }
+.card { background: var(--parch); color: var(--ink); border: 2px solid var(--ink); border-radius: 4px; padding: 16px 18px; }
+.card h2 { font-family: var(--f-display); font-weight: normal; margin: 0 0 10px; font-size: 24px; }
+.field { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 6px 10px; margin: 8px 0; font-size: 15px; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button { padding: 6px 10px; font-size: 14px; }
+.links { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.link { display: grid; grid-template-columns: 110px 1fr auto; gap: 8px; align-items: center; font-size: 14px; border-left: 6px solid var(--c); padding: 4px 8px; background: rgba(42, 29, 18, 0.05); }
+.link code { font-size: 12px; overflow-wrap: anywhere; }
+.features li { margin: 4px 0; font-size: 16px; line-height: 1.35; }
+.foot { margin-top: 30px; font-size: 14px; color: rgba(242, 231, 201, 0.6); text-align: center; }
+@media (max-width: 820px) { .front .grid { grid-template-columns: 1fr; } .field { grid-template-columns: 1fr; } }
+</style></head><body>
+<div id="app">
+  <div id="top"></div>
+  <div id="mapwrap">
+    <canvas id="map" aria-label="Campaign map"></canvas>
+    <div class="credit">The Long Campaign · built by Claude (Anthropic) with Dave</div>
+    <div class="zoom"><button onclick="TLC_zoom(1.25)" aria-label="Zoom in">+</button><button onclick="TLC_zoom(0.8)" aria-label="Zoom out">−</button></div>
+    <div id="status"></div>
+    <div id="unitpanel"></div>
+    <div id="recruit"></div>
+  </div>
+  <div id="side"></div>
+</div>
+<script>
+/* ============================================================================
+   THE LONG CAMPAIGN — rules engine (shared by the server and the browser)
+   Designed and built by Claude (Anthropic) with Dave.
+   ============================================================================ */
+(function (root) {
+'use strict';
+const E = {};
+
+/* ---------------- utilities ---------------- */
+function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const K = (q, r) => q + ',' + r;
+const P = k => { const i = k.indexOf(','); return [+k.slice(0, i), +k.slice(i + 1)]; };
+const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+const hdist = (a, b) => { const [aq, ar] = typeof a === 'string' ? P(a) : a, [bq, br] = typeof b === 'string' ? P(b) : b; return (Math.abs(aq - bq) + Math.abs(ar - br) + Math.abs(aq + ar - bq - br)) / 2; };
+const nbrs = k => { const [q, r] = P(k); return DIRS.map(([dq, dr]) => K(q + dq, r + dr)); };
+const toXY = (q, r) => [Math.sqrt(3) * (q + r / 2), 1.5 * r];
+function fromXY(x, y) {
+  let q = (Math.sqrt(3) / 3 * x - y / 3) / 1, r = (2 / 3 * y);
+  let s = -q - r, rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
+  const dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - s);
+  if (dq > dr && dq > ds) rq = -rr - rs; else if (dr > ds) rr = -rq - rs;
+  return [rq, rr];
+}
+E.util = { rng, clamp, K, P, DIRS, hdist, nbrs, toXY, fromXY };
+
+/* ---------------- the rules in numbers ---------------- */
+const UNIT = {
+  inf: { name: 'Infantry', men: 3, sup: 3, mp: 3, atk: 4, def: 5, sight: 2, up: 1 },
+  cav: { name: 'Cavalry', men: 3, sup: 5, mp: 5, atk: 4, def: 3, sight: 3, up: 2 },
+  art: { name: 'Artillery', men: 2, sup: 6, mp: 2, atk: 1.5, def: 2, sight: 2, up: 2, bombard: 5, range: 2 },
+  eng: { name: 'Engineers', men: 2, sup: 4, mp: 3, atk: 1, def: 3, sight: 2, up: 1 },
+  gen: { name: 'General', men: 2, sup: 4, mp: 4, atk: 1, def: 2, sight: 3, up: 0 }
+};
+const TER = {
+  clear: { name: 'Open ground', cost: 1, def: 1 },
+  woods: { name: 'Woods', cost: 2, def: 1.3 },
+  hills: { name: 'Hills', cost: 2, def: 1.35 },
+  water: { name: 'River', cost: 99, def: 1 },
+  town: { name: 'Town', cost: 1, def: 1.4 }
+};
+const KIND = { town: { name: 'Town', men: 1, sup: 1, def: 1.4, vp: 1, cap: 1 }, hq: { name: 'Headquarters', men: 3, sup: 5, def: 1.6, vp: 2, cap: 4 }, city: { name: 'Capital', men: 3, sup: 4, def: 1.6, vp: 4, cap: 3 } };
+const COLORS = [
+  { id: 'blue', name: 'Blue', c: '#30478f', C: '#23356c', l: '#4f68b8', h: '#22305f', H: '#141c3a', t: '#86a0d6', T: '#6680b8', ui: '#3a5cc0' },
+  { id: 'grey', name: 'Grey', c: '#8f908a', C: '#6f7069', l: '#b9bab0', h: '#6e6f68', H: '#4e4f48', t: '#a88b58', T: '#8a7044', ui: '#7d7e78' },
+  { id: 'crimson', name: 'Crimson', c: '#a8332a', C: '#7e2219', l: '#d0584c', h: '#3a2214', H: '#24140a', t: '#d8d0c0', T: '#b0a898', ui: '#c0392b' },
+  { id: 'green', name: 'Green', c: '#3e7a34', C: '#2b5a24', l: '#62a24e', h: '#24401c', H: '#162a10', t: '#8a7a5a', T: '#6a5c40', ui: '#3e8a34' },
+  { id: 'gold', name: 'Butternut', c: '#b48a3c', C: '#8e6a28', l: '#d8b060', h: '#6a4a20', H: '#4a3214', t: '#7a6a50', T: '#5e5038', ui: '#c8962a' },
+  { id: 'purple', name: 'Purple', c: '#6a3a8a', C: '#4e2868', l: '#9058b4', h: '#2e1a3e', H: '#1e1028', t: '#c0b8c8', T: '#9890a4', ui: '#7c46a8' }
+];
+const NEUTRAL = 99;
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const SEASON_OF = m => (m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'autumn' : 'winter');
+const WEATHER = {
+  clear: { name: 'Clear', desc: 'Good marching weather.' },
+  rain: { name: 'Rain', desc: 'Mud off the roads (+1 to move), guns stuck to roads, fords flooded, powder damp (attacks weaker).' },
+  fog: { name: 'Fog', desc: 'Units see only the next hex. No long-range bombardment.' },
+  heat: { name: 'Heat', desc: 'Units marching three hexes or more may lose men to the heat.' },
+  snow: { name: 'Snow', desc: 'Hard going (+½ to move). Units out of supply lose men twice as fast.' }
+};
+const ERAS = [
+  { year: 1861, name: 'Muskets and smoothbores', text: '' },
+  { year: 1862, name: 'Rifled guns', text: 'Artillery bombardment is 25% stronger.' },
+  { year: 1863, name: 'Repeating carbines', text: 'Cavalry attacks are 25% stronger.' },
+  { year: 1864, name: 'Trench warfare', text: 'Earthworks can be dug three deep and protect better.' }
+];
+const GOALS = {
+  capital: { text: 'Hold the Capital at the end of the war.', vp: 5 },
+  towns: { text: 'Hold at least {n} towns at the end of the war.', vp: 4 },
+  kills: { text: 'Destroy {n} enemy units during the war.', vp: 4 },
+  hq: { text: 'Never let your headquarters fall.', vp: 3 },
+  raider: { text: 'Break {n} enemy railway hexes with cavalry raids.', vp: 3 },
+  enemyhq: { text: 'Hold another army\'s headquarters at the end.', vp: 5 },
+  army: { text: 'Field the largest army at the end of the war.', vp: 3 },
+  far: { text: 'Hold a town on the far side of the map at the end.', vp: 3 }
+};
+E.UNIT = UNIT; E.TER = TER; E.KIND = KIND; E.COLORS = COLORS; E.NEUTRAL = NEUTRAL; E.WEATHER = WEATHER; E.ERAS = ERAS; E.GOALS = GOALS; E.MONTHS = MONTHS; E.SEASON_OF = SEASON_OF;
+
+/* ---------------- symmetry groups for fair maps ---------------- */
+const rot60 = ([q, r]) => [-r, q + r];
+const refl = ([q, r]) => [q, -q - r];
+function groupFor(n) {
+  const rot = k => p => { for (let i = 0; i < k; i++) p = rot60(p); return p; };
+  if (n === 2) return [rot(0), rot(3)];
+  if (n === 3) return [rot(0), rot(2), rot(4)];
+  if (n === 4) return [rot(0), rot(3), p => refl(p), p => refl(rot(3)(p))];
+  return [0, 1, 2, 3, 4, 5].map(rot);
+}
+function seatAngle(n) { return n === 4 ? 15 : 0; }
+
+/* ---------------- names ---------------- */
+const TOWNS = ['Millersburg', 'New Hope', 'Oak Grove', 'Salem', 'Harmony', 'Cedar Run', 'Pine Bluff', 'Mount Zion', 'Goshen', 'Bethel', 'Fairview', 'Cross Keys', 'Liberty', 'Shady Grove', 'Spring Hill', 'Rock Creek', 'Ashland', 'Brandon', 'Clayton', 'Dover', 'Elkton', 'Franklin', 'Glenville', 'Hanover', 'Irvington', 'Jasper', 'Kingston', 'Lebanon', 'Marion', 'Newbern', 'Oxford', 'Paris', 'Quincy', 'Ripley', 'Sparta', 'Troy', 'Union Mills', 'Vernon', 'Warrenton', 'Yorktown', 'Zanesville', 'Albion', 'Berea', 'Canton', 'Danville', 'Edgefield', 'Florence', 'Gainesboro', 'Hillsboro', 'Jonesboro', 'Kent', 'Lancaster', 'Mechanicsville', 'Nashboro', 'Orange', 'Petersville', 'Richland', 'Stanton', 'Tazewell', 'Upton', 'Verona', 'Wilmot'];
+const CAPITALS = ['Columbia', 'Fairhaven', 'Meridian', 'Concord', 'Providence', 'Charleston', 'Lexington', 'Jefferson'];
+const HQ_NAMES = ['Fort Ashby', 'Camp Douglas', 'Fort Hale', 'Camp Lee', 'Fort Mercer', 'Camp Brandt'];
+
+/* ---------------- map generation ---------------- */
+E.newGame = function (opts) {
+  const n = clamp(opts.seats | 0, 2, 6);
+  const seed = (opts.seed >>> 0) || ((Math.random() * 4294967295) >>> 0);
+  const R = rng(seed), rf = (a, b) => a + R() * (b - a), ri = (a, b) => Math.floor(rf(a, b + 1)), pick = a => a[Math.floor(R() * a.length)];
+  const size = opts.mapSize || 'normal';
+  const Rad = ({ 2: 10, 3: 11, 4: 12, 5: 14, 6: 14 }[n]) + (size === 'large' ? 3 : size === 'small' ? -2 : 0);
+  const G = groupFor(n), slots = n === 5 ? 6 : n;
+  const hexes = {};
+  for (let q = -Rad; q <= Rad; q++) for (let r = -Rad; r <= Rad; r++) if (Math.abs(q + r) <= Rad) hexes[K(q, r)] = { q, r, t: 'clear' };
+  const keys = Object.keys(hexes);
+  const orbit = k => { const p = P(k), s = new Set(); for (const g of G) { const [a, b] = g(p); s.add(K(a, b)); } return [...s]; };
+  // smooth noise from random bumps, averaged over each orbit so the board is symmetric
+  const bumps = (count, rad) => Array.from({ length: count }, () => ({ x: rf(-1.7, 1.7) * Rad, y: rf(-1.5, 1.5) * Rad, r: rf(0.6, 1.4) * rad, h: rf(0.5, 1) }));
+  const field = list => k => { const [x, y] = toXY(...P(k)); let v = 0; for (const b of list) { const d = ((x - b.x) ** 2 + (y - b.y) ** 2) / (b.r * b.r); v += b.h * Math.exp(-d); } return v; };
+  const symField = f => { const out = {}; for (const k of keys) { if (out[k] !== undefined) continue; const o = orbit(k).filter(x => hexes[x]); const v = Math.max(...o.map(f)); for (const x of o) out[x] = v; } return out; };
+  const density = { light: 0.7, normal: 1, heavy: 1.35 }[opts.terrain || 'normal'];
+  const nb = Math.max(2, Math.round(Rad * 0.45 / Math.max(1, G.length / 2)));
+  const hill = symField(field(bumps(Math.round(nb * 0.8), 3.6)));
+  const wood = symField(field(bumps(Math.round(nb * 1.3 * density), 4.2)));
+  const thr = (fld, frac) => { const v = keys.map(k => fld[k]).sort((a, b) => b - a); return v[Math.floor(v.length * frac)]; };
+  const hT = thr(hill, 0.12 * Math.sqrt(density)), wT = thr(wood, 0.22 * density);
+  for (const k of keys) {
+    if (hill[k] > hT && hdist(k, '0,0') > 1) hexes[k].t = 'hills';
+    else if (wood[k] > wT) hexes[k].t = 'woods';
+  }
+  // seats: headquarters placed by symmetry
+  const ang = seatAngle(n) * Math.PI / 180, dist0 = Rad * 0.74;
+  const h0 = fromXY(Math.cos(ang) * dist0 * Math.sqrt(3), Math.sin(ang) * dist0 * 1.5);
+  const hqAll = G.map(g => K(...g(h0)));
+  const center = K(0, 0);
+  const protect = new Set([center, ...hqAll]);
+  for (const h of hqAll) for (const x of nbrs(h)) protect.add(x);
+  // rivers: random walks from near the centre to the edge, copied around the board
+  const rivers = new Set();
+  const nRiv = opts.rivers === undefined ? 1 : opts.rivers;
+  for (let i = 0; i < nRiv; i++) {
+    let cur = K(...fromXY(rf(-0.3, 0.3) * Rad, rf(-0.3, 0.3) * Rad)), dir = ri(0, 5), steps = 0;
+    while (hexes[cur] && steps++ < Rad * 1.4) {
+      if (!protect.has(cur) && hdist(cur, center) > 2) rivers.add(cur);
+      if (R() < 0.35) dir = (dir + (R() < 0.5 ? 1 : 5)) % 6;
+      const [q, r] = P(cur); cur = K(q + DIRS[dir][0], r + DIRS[dir][1]);
+    }
+  }
+  for (const k of [...rivers]) for (const o of orbit(k)) if (hexes[o] && !protect.has(o)) hexes[o].t = 'water';
+  // towns: the capital at the centre, headquarters, then neutral towns placed one orbit at a time
+  const towns = [];
+  const usedNames = new Set(), tname = () => { let s; do s = pick(TOWNS); while (usedNames.has(s)); usedNames.add(s); return s; };
+  const setTown = (k, kind, name, owner) => { const h = hexes[k]; h.t = 'town'; h.town = { name, kind, owner, fort: kind === 'town' ? 0 : 1 }; towns.push(k); };
+  setTown(center, 'city', pick(CAPITALS), NEUTRAL);
+  const seatOf = {};
+  hqAll.forEach((k, i) => { setTown(k, 'hq', HQ_NAMES[i], i < n || n !== 5 ? (i < n ? i : NEUTRAL) : NEUTRAL); seatOf[k] = i; });
+  if (n === 5) { const k = hqAll[5]; hexes[k].town.kind = 'town'; hexes[k].town.name = tname(); hexes[k].town.fort = 1; }
+  const perSeat = Math.round(Rad * 0.55 * (opts.towns === 'many' ? 1.4 : opts.towns === 'few' ? 0.7 : 1));
+  let tries = 0, placed = 0;
+  while (placed < perSeat * G.length && tries++ < 3000) {
+    const k = pick(keys); if (hexes[k].t === 'water' || hexes[k].town) continue;
+    const o = orbit(k).filter(x => hexes[x]);
+    if (o.some(x => hexes[x].t === 'water' || towns.some(t => hdist(t, x) < 3))) continue;
+    if (o.length > 1 && o.some((a, i) => o.some((b, j) => i < j && hdist(a, b) < 3))) continue;
+    for (const x of o) { setTown(x, 'town', tname(), NEUTRAL); placed++; }
+  }
+  // farms beside towns
+  for (const t of towns) {
+    if (seatOf[t] === undefined && hexes[t].town.kind !== 'town') continue;
+  }
+  const farmBase = new Set();
+  const doneT = new Set();
+  for (const t of towns) { if (doneT.has(t)) continue; for (const o of orbit(t)) doneT.add(o); const cand = nbrs(t).filter(x => hexes[x] && hexes[x].t === 'clear' && !hexes[x].town); for (let i = 0; i < (hexes[t].town.kind === 'town' ? 1 : 2) && cand.length; i++) farmBase.add(cand.splice(Math.floor(R() * cand.length), 1)[0]); }
+  for (const k of keys) if (hexes[k].t === 'clear' && R() < 0.04 / G.length * 2) farmBase.add(k);
+  for (const k of [...farmBase]) for (const o of orbit(k)) if (hexes[o] && hexes[o].t === 'clear' && !hexes[o].town) hexes[o].farm = { town: null, burned: 0 };
+  for (const k of keys) if (hexes[k].farm) {
+    // a farm belongs to its nearest town; a farm equally near two towns would favour one army, so it is left wild
+    const ds = towns.map(t => hdist(k, t)), m = Math.min(...ds);
+    if (ds.filter(d => d === m).length > 1) { for (const o of orbit(k)) if (hexes[o]) delete hexes[o].farm; continue; }
+    hexes[k].farm.town = towns[ds.indexOf(m)];
+  }
+  // roads and railways: shortest paths, then copied around the board for symmetry
+  const pathCost = k => { const h = hexes[k]; return !h ? 99 : h.t === 'water' ? 6 : h.t === 'hills' ? 3 : h.t === 'woods' ? 2.5 : h.road ? 0.6 : 1; };
+  const astar = (a, b) => {
+    const open = [[0, a]], g = { [a]: 0 }, from = {};
+    while (open.length) {
+      open.sort((x, y) => x[0] - y[0]); const [, cur] = open.shift(); if (cur === b) break;
+      for (const nb of nbrs(cur)) { if (!hexes[nb]) continue; const ng = g[cur] + pathCost(nb); if (g[nb] === undefined || ng < g[nb]) { g[nb] = ng; from[nb] = cur; open.push([ng + hdist(nb, b), nb]); } }
+    }
+    const out = []; let c = b; while (c && c !== a) { out.push(c); c = from[c]; } out.push(a); return out.reverse();
+  };
+  const mark = (path, f) => { for (const k of path) for (const o of orbit(k)) if (hexes[o]) hexes[o][f] = true; };
+  const neutral = towns.filter(t => hexes[t].town.kind === 'town');
+  for (const t of neutral) { const near = towns.filter(x => x !== t).sort((a, b) => hdist(a, t) - hdist(b, t)).slice(0, 2); for (const x of near) mark(astar(t, x), 'road'); }
+  mark(astar(hqAll[0], center), 'rail');
+  for (const k of keys) { const h = hexes[k]; if (h.t === 'water' && (h.road || h.rail)) h.bridge = true; }
+  // fords on the rivers
+  for (const k of keys) { const h = hexes[k]; if (h.t === 'water' && !h.bridge && R() < 0.12) for (const o of orbit(k)) if (hexes[o] && hexes[o].t === 'water' && !hexes[o].bridge) hexes[o].ford = true; }
+  // every headquarters must be able to reach the capital
+  for (const hq of hqAll) {
+    const seen = new Set([hq]), q = [hq];
+    while (q.length) { const c = q.shift(); for (const nb of nbrs(c)) { const h = hexes[nb]; if (!h || seen.has(nb) || (h.t === 'water' && !h.bridge && !h.ford)) continue; seen.add(nb); q.push(nb); } }
+    if (!seen.has(center)) for (const k of astar(hq, center)) for (const o of orbit(k)) if (hexes[o] && hexes[o].t === 'water') hexes[o].bridge = true;
+  }
+  const humans = opts.humans === undefined ? n : opts.humans;
+  const seats = [];
+  for (let i = 0; i < n; i++) seats.push({ seat: i, color: COLORS[i].id, name: (opts.names && opts.names[i]) || (i < humans ? '' : `General ${['Ashby', 'Bragg', 'Custis', 'Doyle', 'Ewing', 'Foote'][i]}`), bot: i >= humans, hq: hqAll[i], alive: true, men: 6, sup: 10, goal: null, stats: { kills: 0, raids: 0, hqLost: false }, submitted: false, joined: i >= humans });
+  const state = {
+    v: 1, id: opts.id || null, name: opts.name || 'The Long Campaign', seed, R: Rad, n, hexes, seats, units: {}, nextId: 1, turn: 1,
+    startMonth: opts.startMonth === undefined ? 3 : opts.startMonth, startYear: 1861, mode: opts.mode || 'points', turnLimit: opts.turnLimit || 30, eraTurns: opts.eraTurns || 8,
+    center, rel: { sight: seats.map(() => seats.map(() => false)), passage: seats.map(() => seats.map(() => false)) },
+    weather: { fronts: [] }, capitalHold: { seat: null, count: 0 }, lastEvents: [], log: [], over: null, created: Date.now(), rngState: seed ^ 0x9e3779b9
+  };
+  // armies: each starts at its headquarters
+  const place = (seat, type, k, str) => { const id = 'u' + state.nextId++; state.units[id] = { id, seat, type, at: k, str: str || 10 }; return id; };
+  // seat 0 is laid out once and every other army gets the same layout turned to face the centre
+  const ring0 = nbrs(hqAll[0]).filter(x => hexes[x] && hexes[x].t !== 'water' && !hexes[x].town).sort((a, b) => hdist(a, center) - hdist(b, center));
+  for (let i = 0; i < n; i++) {
+    place(i, 'inf', hqAll[i]);
+    ['inf', 'cav', 'art', 'eng', 'gen'].forEach((t, j) => { if (ring0[j]) place(i, t, K(...G[i](P(ring0[j])))); });
+  }
+  // neutral garrisons hold every unclaimed town
+  for (const t of towns) {
+    const tw = hexes[t].town; if (tw.owner !== NEUTRAL) continue;
+    // with five armies the empty sixth slice is held by strong garrisons, so its neighbours gain no free land
+    const inEmpty = n === 5 && hdist(t, hqAll[5]) < Math.min(...hqAll.slice(0, 5).map(h => hdist(t, h)));
+    place(NEUTRAL, 'inf', t, tw.kind === 'city' || inEmpty ? 10 : 4 + Math.floor(R() * 2)); if (tw.kind === 'city' || inEmpty) hexes[t].ent = inEmpty ? 2 : 1;
+  }
+  // secret goals
+  const gl = Object.keys(GOALS); for (let i = gl.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [gl[i], gl[j]] = [gl[j], gl[i]]; }
+  const allTowns = towns.length;
+  seats.forEach((s, i) => { const id = gl[i % gl.length]; const nn = id === 'towns' ? Math.max(4, Math.round(allTowns / n * 1.3)) : id === 'kills' ? 6 : id === 'raider' ? 5 : 0; s.goal = { id, n: nn, text: GOALS[id].text.replace('{n}', nn), vp: GOALS[id].vp }; });
+  // the first weather
+  advanceWeather(state, true); advanceWeather(state, true); advanceWeather(state, true);
+  makeForecast(state);
+  state.log.push({ turn: 0, text: `War is declared. ${n} armies take the field.` });
+  return state;
+};
+
+/* ---------------- calendar, weather and eras ---------------- */
+E.dateOf = (state, turn) => { const m = (state.startMonth + (turn - 1)) % 12, y = state.startYear + Math.floor((state.startMonth + turn - 1) / 12); return { month: m, year: y, label: `${MONTHS[m]} ${y}`, season: SEASON_OF(m) }; };
+function srand(state) { const r = rng(state.rngState); const v = r(); state.rngState = (state.rngState * 1103515245 + 12345 + Math.floor(v * 1e6)) >>> 0; return v; }
+function frontsCopy(f) { return f.map(x => ({ ...x })); }
+function stepFronts(state, list, season, R) {
+  const out = [];
+  for (const f of list) { const g = { ...f, x: f.x + f.vx, y: f.y + f.vy, life: f.life - 1 }; if (g.life > 0 && Math.abs(g.x) < state.R * 2.6 && Math.abs(g.y) < state.R * 2.2) out.push(g); }
+  const P0 = { spring: { rain: 0.5, fog: 0.25 }, summer: { heat: 0.45, rain: 0.25 }, autumn: { fog: 0.3, rain: 0.25 }, winter: { snow: 0.55, fog: 0.2 } }[season];
+  for (const kind in P0) if (R() < P0[kind] && out.length < 4) {
+    // fronts come in from any side and cross the whole board, so no corner of the map is always wetter
+    const side = Math.floor(R() * 4), span = state.R * 2.2, sp = 3 + R() * 1.6, off = (R() * 2 - 1) * state.R * 1.1;
+    const [x, y, vx, vy] = side === 0 ? [-span, off, sp, (R() - 0.5)] : side === 1 ? [span, off, -sp, (R() - 0.5)] : side === 2 ? [off, -span * 0.9, (R() - 0.5), sp] : [off, span * 0.9, (R() - 0.5), -sp];
+    out.push({ kind, x, y, vx, vy, r: 4 + R() * 3 + state.R * 0.18, life: Math.ceil(span * 2 / sp) + 1 });
+  }
+  return out;
+}
+function advanceWeather(state, init) {
+  // the board always knows the real weather two months ahead; forecasts are drawn from it with errors
+  const W = state.weather, R = () => srand(state);
+  if (!W.future) W.future = [];
+  const lastF = W.future.length ? W.future[W.future.length - 1] : W.fronts;
+  const t = state.turn + (init ? W.future.length : W.future.length + 1);
+  W.future.push(stepFronts(state, lastF, E.dateOf(state, t).season, R));
+  if (W.future.length > 2) W.fronts = W.future.shift();
+}
+function makeForecast(state) {
+  const W = state.weather, R = () => srand(state);
+  W.forecast = W.future.map((fr, i) => fr.filter(() => R() < (i === 0 ? 0.92 : 0.75)).map(f => {
+    const ok = R() < (i === 0 ? 0.8 : 0.5);
+    if (ok) return { ...f };
+    const kinds = ['rain', 'fog', 'heat', 'snow', 'clear'];
+    return { ...f, x: f.x + (R() - 0.5) * 8, y: f.y + (R() - 0.5) * 8, kind: R() < 0.5 ? f.kind : kinds[Math.floor(R() * kinds.length)] };
+  }).filter(f => f.kind !== 'clear'));
+}
+E.weatherAt = function (fronts, k) {
+  const [x, y] = toXY(...P(k));
+  let best = 'clear', bd = 1e9;
+  for (const f of fronts || []) { const d = Math.hypot(x - f.x, y - f.y); if (d < f.r && d < bd) { bd = d; best = f.kind; } }
+  return best;
+};
+E.eraOf = (state, seat) => { const base = Math.min(3, Math.floor((state.turn - 1) / state.eraTurns)); const c = state.hexes[state.center]; return Math.min(3, base + (c.town.owner === seat ? 1 : 0)); };
+
+/* ---------------- movement ---------------- */
+E.relFriendly = function (state, mover, occupantSeat) { return mover === occupantSeat || (occupantSeat !== NEUTRAL && mover !== NEUTRAL && state.rel.passage[occupantSeat] && state.rel.passage[occupantSeat][mover]); };
+E.stepCost = function (state, type, a, b, fronts) {
+  const ha = state.hexes[a], hb = state.hexes[b]; if (!ha || !hb) return Infinity;
+  const w = E.weatherAt(fronts, b);
+  if (hb.t === 'water' && !hb.bridge && !(hb.ford && w !== 'rain')) return Infinity;
+  const roadish = (ha.road || (ha.rail && !ha.railBroken) || ha.town) && (hb.road || (hb.rail && !hb.railBroken) || hb.town);
+  let c = roadish ? 0.5 : hb.t === 'water' ? (hb.bridge ? 1 : 2) : TER[hb.t].cost;
+  if (!roadish) { if (w === 'rain') { if (type === 'art') return Infinity; c += 1; } if (w === 'snow') c += 0.5; }
+  return c;
+};
+// every hex a unit can reach this turn, with the cheapest path (zone of control stops a march)
+E.reach = function (state, u, occupied, fronts, rnd) {
+  const mp = UNIT[u.type].mp, best = { [u.at]: 0 }, from = {}, open = [u.at], stopAt = new Set();
+  const hostileAdj = k => nbrs(k).some(x => { const o = occupied[x]; return o && !E.relFriendly(state, u.seat, o.seat); });
+  while (open.length) {
+    open.sort((a, b) => best[a] - best[b]); const cur = open.shift();
+    if (cur !== u.at && (stopAt.has(cur))) continue;
+    const nn = nbrs(cur); if (rnd) { const o = Math.floor(rnd() * 6); nn.push(...nn.splice(0, o)); if (rnd() < 0.5) nn.reverse(); }
+    for (const nb of nn) {
+      const o = occupied[nb];
+      const c = E.stepCost(state, u.type, cur, nb, fronts); if (!isFinite(c)) continue;
+      const ng = best[cur] + c; if (ng > mp + 1e-9) continue;
+      if (o && !E.relFriendly(state, u.seat, o.seat)) { if (best[nb] === undefined || ng < best[nb]) { best[nb] = ng; from[nb] = cur; } continue; } // can attack it, not pass
+      if (best[nb] === undefined || ng < best[nb]) { best[nb] = ng; from[nb] = cur; open.push(nb); if (hostileAdj(nb)) stopAt.add(nb); }
+    }
+  }
+  return { best, from };
+};
+E.pathTo = function (reach, start, goal) { const out = []; let c = goal; while (c && c !== start) { out.push(c); c = reach.from[c]; } if (c !== start) return null; return out.reverse(); };
+
+/* ---------------- visibility ---------------- */
+E.visibleSet = function (state, seat, fronts) {
+  const vis = new Set(), viewers = [seat];
+  for (let s = 0; s < state.n; s++) if (s !== seat && state.rel.sight[s][seat] && state.seats[s].alive) viewers.push(s);
+  const add = (k, rng) => { const [q0, r0] = P(k); for (let dq = -rng; dq <= rng; dq++) for (let dr = -rng; dr <= rng; dr++) { if (Math.abs(dq + dr) > rng) continue; const x = K(q0 + dq, r0 + dr); if (state.hexes[x]) vis.add(x); } };
+  for (const id in state.units) { const u = state.units[id]; if (!viewers.includes(u.seat)) continue; let s = UNIT[u.type].sight + (state.hexes[u.at].t === 'hills' ? 1 : 0); if (E.weatherAt(fronts, u.at) === 'fog') s = 1; add(u.at, s); }
+  for (const k in state.hexes) { const t = state.hexes[k].town; if (t && viewers.includes(t.owner)) add(k, E.weatherAt(fronts, k) === 'fog' ? 1 : t.kind === 'town' ? 1 : 2); }
+  return vis;
+};
+E.canSeeUnit = function (state, seat, u, vis) {
+  if (u.seat === seat || (u.seat !== NEUTRAL && state.rel.sight[u.seat][seat])) return true;
+  if (!vis.has(u.at)) return false;
+  if (state.hexes[u.at].t === 'woods') { // woods hide troops from all but the closest look
+    for (const id in state.units) { const v = state.units[id]; if ((v.seat === seat || (v.seat !== NEUTRAL && state.rel.sight[v.seat][seat])) && hdist(v.at, u.at) <= 1) return true; }
+    return false;
+  }
+  return true;
+};
+
+/* ---------------- what each player is allowed to see ---------------- */
+E.view = function (state, seat) {
+  const vis = E.visibleSet(state, seat, state.weather.fronts);
+  const units = {};
+  for (const id in state.units) { const u = state.units[id]; if (E.canSeeUnit(state, seat, u, vis)) units[id] = u; }
+  const seats = state.seats.map(s => ({ seat: s.seat, color: s.color, name: s.name, bot: s.bot, alive: s.alive, submitted: s.submitted, joined: s.joined, hq: s.hq, score: E.score(state, s.seat).vp, towns: E.townCount(state, s.seat), ...(s.seat === seat || state.over ? { men: s.men, sup: s.sup, goal: s.goal, stats: s.stats } : {}) }));
+  const ev = (state.lastEvents || []).filter(e => e.vis === undefined || e.vis.includes(seat) || state.over);
+  return {
+    v: state.v, id: state.id, name: state.name, R: state.R, n: state.n, seed: state.seed, turn: state.turn, mode: state.mode, turnLimit: state.turnLimit, eraTurns: state.eraTurns, startMonth: state.startMonth, startYear: state.startYear,
+    center: state.center, hexes: state.hexes, units, seats, me: seat, rel: state.rel, visible: [...vis], weather: { fronts: state.weather.fronts, forecast: state.weather.forecast }, capitalHold: state.capitalHold,
+    events: ev.map(e => { const c = { ...e }; delete c.vis; return c; }), log: state.log.slice(-60), over: state.over, deadline: state.deadline, myOrders: state.orders && state.orders[seat] || null
+  };
+};
+
+/* ---------------- scoring ---------------- */
+E.townCount = (state, seat) => { let n = 0; for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === seat) n++; } return n; };
+E.score = function (state, seat, final) {
+  let vp = 0; for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === seat) vp += KIND[t.kind].vp; }
+  const goalMet = final ? E.goalMet(state, seat) : false;
+  return { vp: vp + (goalMet ? state.seats[seat].goal.vp : 0), goalMet };
+};
+E.goalMet = function (state, seat) {
+  const s = state.seats[seat], g = s.goal; if (!g || !s.alive) return false;
+  const H = state.hexes, mine = k => H[k].town && H[k].town.owner === seat;
+  const army = sid => Object.values(state.units).filter(u => u.seat === sid && u.type !== 'gen').length;
+  switch (g.id) {
+    case 'capital': return mine(state.center);
+    case 'towns': return E.townCount(state, seat) >= g.n;
+    case 'kills': return s.stats.kills >= g.n;
+    case 'hq': return !s.stats.hqLost && mine(s.hq);
+    case 'raider': return s.stats.raids >= g.n;
+    case 'enemyhq': return state.seats.some(o => o.seat !== seat && mine(o.hq));
+    case 'army': { const me = army(seat); return state.seats.every(o => o.seat === seat || army(o.seat) < me); }
+    case 'far': return Object.keys(H).some(k => mine(k) && hdist(k, s.hq) >= state.R * 1.5);
+  }
+  return false;
+};
+E.unitCap = (state, seat) => { let c = 4; for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === seat) c += KIND[t.kind].cap; } return c; };
+E.inSupply = function (state, u) {
+  if (u.seat === NEUTRAL) return true;
+  for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === u.seat && hdist(k, u.at) <= 4) return true; }
+  // railheads: an unbroken line back to an owned town
+  const h = state.hexes[u.at]; if (!h.rail || h.railBroken) return false;
+  const seen = new Set([u.at]), q = [u.at];
+  while (q.length) { const c = q.shift(); const t = state.hexes[c].town; if (t && t.owner === u.seat) return true; for (const nb of nbrs(c)) { const x = state.hexes[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); } } }
+  return false;
+};
+
+/* ---------------- orders ---------------- */
+// orders = { units: {id: {k:'move', path:[...]} | {k:'hold'} | {k:'support', hex, for} | {k:'bombard', hex} | {k:'raid'} | {k:'dig'} | {k:'fortify'} | {k:'bridge', hex} | {k:'repair'} }, recruit: [{hex, type}], diplo: {sight:[], passage:[], gift: [{to, men, sup}]} }
+E.cleanOrders = function (state, seat, o) {
+  const out = { units: {}, recruit: [], diplo: { sight: state.rel.sight[seat].slice(), passage: state.rel.passage[seat].slice(), gift: [] } };
+  if (!o || typeof o !== 'object') return out;
+  const occ = E.occupancy(state);
+  for (const id in (o.units || {})) {
+    const u = state.units[id], ord = o.units[id]; if (!u || u.seat !== seat || !ord) continue;
+    const k = ord.k;
+    if (k === 'move' && Array.isArray(ord.path) && ord.path.length) {
+      let cur = u.at, cost = 0; const path = [];
+      for (const x of ord.path.slice(0, 12)) { if (typeof x !== 'string' || !state.hexes[x] || hdist(cur, x) !== 1) break; const c = E.stepCost(state, u.type, cur, x, state.weather.fronts); if (!isFinite(c) || cost + c > UNIT[u.type].mp + 1e-9) break; cost += c; path.push(x); cur = x; }
+      if (path.length) out.units[id] = { k: 'move', path };
+    } else if (k === 'support' && state.hexes[ord.hex] && hdist(u.at, ord.hex) <= (u.type === 'art' ? 2 : 1) && hdist(u.at, ord.hex) >= 1 && Number.isInteger(ord.for) && ord.for >= 0 && ord.for < state.n) out.units[id] = { k: 'support', hex: ord.hex, for: ord.for };
+    else if (k === 'bombard' && u.type === 'art' && state.hexes[ord.hex] && hdist(u.at, ord.hex) >= 1 && hdist(u.at, ord.hex) <= 2) out.units[id] = { k: 'bombard', hex: ord.hex };
+    else if (k === 'raid' && u.type === 'cav') out.units[id] = { k: 'raid' };
+    else if ((k === 'dig' || k === 'fortify' || k === 'repair') && u.type === 'eng') out.units[id] = { k };
+    else if (k === 'bridge' && u.type === 'eng' && state.hexes[ord.hex] && hdist(u.at, ord.hex) === 1 && state.hexes[ord.hex].t === 'water') out.units[id] = { k: 'bridge', hex: ord.hex };
+    else if (k === 'hold') out.units[id] = { k: 'hold' };
+  }
+  const s = state.seats[seat];
+  let men = s.men, sup = s.sup, count = Object.values(state.units).filter(u => u.seat === seat && u.type !== 'gen').length; const cap = E.unitCap(state, seat);
+  const hasGen = Object.values(state.units).some(u => u.seat === seat && u.type === 'gen');
+  const used = new Set();
+  for (const r of (o.recruit || []).slice(0, 8)) {
+    const h = state.hexes[r.hex], T = UNIT[r.type]; if (!h || !h.town || h.town.owner !== seat || !T || used.has(r.hex)) continue;
+    if (h.town.kind === 'town' && (r.type === 'art' || r.type === 'eng' || r.type === 'gen')) continue;
+    if (r.type === 'gen' && (hasGen || h.town.kind !== 'hq')) continue;
+    if (occ[r.hex] && occ[r.hex].seat !== seat) continue;
+    if (men < T.men || sup < T.sup || (r.type !== 'gen' && count >= cap)) continue;
+    men -= T.men; sup -= T.sup; if (r.type !== 'gen') count++; used.add(r.hex); out.recruit.push({ hex: r.hex, type: r.type });
+  }
+  const d = o.diplo || {};
+  for (let i = 0; i < state.n; i++) if (i !== seat) { if (Array.isArray(d.sight) && typeof d.sight[i] === 'boolean') out.diplo.sight[i] = d.sight[i]; if (Array.isArray(d.passage) && typeof d.passage[i] === 'boolean') out.diplo.passage[i] = d.passage[i]; }
+  let gm = men, gs = sup;
+  for (const g of (d.gift || []).slice(0, 5)) { const to = g.to | 0, m = clamp(g.men | 0, 0, gm), su = clamp(g.sup | 0, 0, gs); if (to === seat || to < 0 || to >= state.n || (!m && !su)) continue; gm -= m; gs -= su; out.diplo.gift.push({ to, men: m, sup: su }); }
+  return out;
+};
+E.occupancy = function (state) { const o = {}; for (const id in state.units) { const u = state.units[id]; o[u.at] = u; } return o; };
+
+/* ---------------- combat ---------------- */
+function power(state, u, role, hexK, extra) {
+  const T = UNIT[u.type], h = state.hexes[hexK], era = u.seat === NEUTRAL ? 0 : E.eraOf(state, u.seat);
+  let p = (role === 'att' ? T.atk : T.def) * (u.str / 10) * (u.str < 4 ? 0.8 : 1);
+  if (role === 'def') {
+    p *= h.town ? KIND[h.town.kind].def : h.t === 'water' ? 0.9 : TER[h.t].def;
+    p *= 1 + (h.town ? h.town.fort * 0.25 : 0) + (h.ent || 0) * (era >= 3 ? 0.25 : 0.2);
+  }
+  if (role === 'att' && u.type === 'cav' && era >= 2) p *= 1.25;
+  const g = Object.values(state.units).find(v => v.seat === u.seat && v.type === 'gen' && v.id !== u.id && hdist(v.at, u.at) <= 1);
+  if (g) p *= 1.15;
+  if (role === 'att' && E.weatherAt(state.weather.fronts, u.at) === 'rain') p *= 0.85;
+  return p * (extra || 1);
+}
+function supportPower(state, s, role) { const T = UNIT[s.type]; if (s.type === 'art') return T.bombard * 0.5 * (s.str / 10) * (E.eraOf(state, s.seat) >= 1 ? 1.25 : 1); return (role === 'att' ? T.atk : T.def) * 0.5 * (s.str / 10); }
+
+/* ---------------- the turn ---------------- */
+E.resolve = function (state, ordersBySeat) {
+  const H = state.hexes, R = () => srand(state), ev = [], log = [], date = E.dateOf(state, state.turn);
+  const fronts = state.weather.fronts;
+  const say = (text, hexes, seats) => { log.push({ turn: state.turn, text }); };
+  const visBefore = state.seats.map(s => E.visibleSet(state, s.seat, fronts));
+  const O = {};
+  for (let s = 0; s < state.n; s++) O[s] = E.cleanOrders(state, s, (ordersBySeat || {})[s] || (state.seats[s].bot ? E.botOrders(state, s) : null));
+  const unitOrder = id => { const u = state.units[id]; if (!u || u.seat === NEUTRAL) return { k: 'hold' }; return (O[u.seat].units[id]) || { k: 'hold' }; };
+  // 1. diplomacy changes and gifts
+  for (let s = 0; s < state.n; s++) {
+    if (!state.seats[s].alive) continue;
+    const d = O[s].diplo;
+    for (let t = 0; t < state.n; t++) if (t !== s) {
+      if (state.rel.sight[s][t] !== d.sight[t]) ev.push({ k: 'diplo', text: `${nameOf(state, s)} ${d.sight[t] ? 'now shares its scouts\' reports with' : 'stops sharing scouts\' reports with'} ${nameOf(state, t)}.`, vis: [s, t] });
+      if (state.rel.passage[s][t] !== d.passage[t]) ev.push({ k: 'diplo', text: `${nameOf(state, s)} ${d.passage[t] ? 'grants free passage to' : 'withdraws free passage from'} ${nameOf(state, t)}.`, vis: [s, t] });
+      state.rel.sight[s][t] = d.sight[t]; state.rel.passage[s][t] = d.passage[t];
+    }
+    for (const g of d.gift) { const a = state.seats[s], b = state.seats[g.to]; if (!b.alive) continue; const m = Math.min(g.men, a.men), su = Math.min(g.sup, a.sup); a.men -= m; a.sup -= su; b.men += m; b.sup += su; ev.push({ k: 'diplo', text: `${nameOf(state, s)} sends ${m} recruits and ${su} supply to ${nameOf(state, g.to)}.`, vis: [s, g.to] }); }
+  }
+  // 2. movement, one step at a time for everyone at once
+  const paths = {};
+  for (const id in state.units) { const o = unitOrder(id); if (o.k === 'move') paths[id] = o.path.slice(); }
+  const moved = {}, startAt = {}, contact = new Set();
+  for (const id in state.units) startAt[id] = state.units[id].at;
+  const hostile = (a, b) => !E.relFriendly(state, a.seat, b.seat);
+  for (let tick = 0; tick < 12; tick++) {
+    const occ = E.occupancy(state);
+    let want = {};
+    for (const id in paths) { const p = paths[id]; if (p && p.length) want[id] = p[0]; }
+    if (!Object.keys(want).length) break;
+    let ok = new Set(Object.keys(want)), changed = true;
+    // a hostile unit in the way means contact: the march stops here (an attack follows later)
+    for (const id of [...ok]) { const o = occ[want[id]]; if (o && hostile(state.units[id], o)) { ok.delete(id); paths[id] = null; contact.add(id); } }
+    while (changed) {
+      changed = false;
+      const into = {};
+      for (const id of ok) (into[want[id]] = into[want[id]] || []).push(id);
+      for (const hx in into) {
+        const L = into[hx];
+        if (L.length > 1) {
+          const seats = new Set(L.map(i => state.units[i].seat));
+          if (seats.size > 1 && L.some(a => L.some(b => hostile(state.units[a], state.units[b])))) { for (const i of L) { ok.delete(i); paths[i] = null; contact.add(i); } ev.push({ k: 'clash', hex: hx, units: L.slice(), vis: null }); changed = true; continue; }
+          L.sort((a, b) => (paths[a].length - paths[b].length) || (a < b ? -1 : 1)); for (const i of L.slice(1)) { ok.delete(i); changed = true; }
+        }
+        const occu = occ[hx];
+        if (occu && !(ok.has(occu.id) && want[occu.id] !== occu.at)) {
+          // the hex is held by a unit that is not leaving: friends may march through it, but not stop in it
+          for (const i of (into[hx] || [])) if (ok.has(i) && (paths[i].length === 1 || !E.relFriendly(state, state.units[i].seat, occu.seat))) { ok.delete(i); changed = true; }
+        }
+      }
+      // head-on swaps
+      for (const a of [...ok]) for (const b of [...ok]) if (a < b && want[a] === state.units[b].at && want[b] === state.units[a].at) { ok.delete(a); ok.delete(b); changed = true; if (hostile(state.units[a], state.units[b])) { contact.add(a); contact.add(b); paths[a] = null; paths[b] = null; } }
+    }
+    for (const id of shuffle(Object.keys(want), R)) {
+      const u = state.units[id];
+      if (ok.has(id)) {
+        (moved[id] = moved[id] || [u.at]).push(want[id]); u.at = want[id]; paths[id].shift();
+        // zone of control
+        if (paths[id].length) { const occ2 = E.occupancy(state); const adj = nbrs(u.at).some(x => occ2[x] && hostile(u, occ2[x]) && x !== paths[id][paths[id].length - 1]); if (adj) { contact.add(id); paths[id] = [paths[id][paths[id].length - 1]].filter(x => occ2[x] && hostile(u, occ2[x]) && nbrs(u.at).includes(x)); } }
+      } else if (paths[id] && !contact.has(id)) paths[id] = null; // blocked by friends: stop
+    }
+  }
+  // nobody ends the march stacked on another unit: the later arrival steps back along its route
+  for (let pass = 0; pass < 8; pass++) {
+    const at = {}; let fixed = false;
+    for (const id in state.units) (at[state.units[id].at] = at[state.units[id].at] || []).push(id);
+    for (const hx in at) {
+      if (at[hx].length < 2) continue;
+      const stay = at[hx].find(id => !moved[id]) || at[hx][Math.floor(R() * at[hx].length)];
+      for (const id of at[hx]) { if (id === stay || !moved[id] || moved[id].length < 2) continue; moved[id].pop(); state.units[id].at = moved[id][moved[id].length - 1]; if (moved[id].length < 2) delete moved[id]; fixed = true; }
+    }
+    if (!fixed) break;
+  }
+  for (const id in moved) ev.push({ k: 'move', u: id, seat: state.units[id].seat, type: state.units[id].type, path: moved[id] });
+  // heat: long marches cost men
+  for (const id in moved) { const u = state.units[id]; if (moved[id].length >= 4 && E.weatherAt(fronts, u.at) === 'heat' && R() < 0.5) { u.str -= 1; ev.push({ k: 'attrition', hex: u.at, u: id, text: `${uname(state, u)} loses men to the heat.` }); } }
+  // 3. bombardment (in random order, so no army always fires first)
+  for (const id of shuffle(Object.keys(state.units), R)) {
+    if (!state.units[id]) continue;
+    const u = state.units[id], o = unitOrder(id); if (o.k !== 'bombard' || u.str <= 0) continue;
+    if (E.weatherAt(fronts, u.at) === 'fog' || E.weatherAt(fronts, o.hex) === 'fog') { ev.push({ k: 'note', hex: u.at, text: `${uname(state, u)} cannot see to fire in the fog.`, seat: u.seat }); continue; }
+    const occ = E.occupancy(state), t = occ[o.hex];
+    const h = H[o.hex];
+    if (h.ent) h.ent = Math.max(0, h.ent - 1);
+    if (h.town && h.town.fort && R() < 0.4) h.town.fort--;
+    if (!t || t.seat === u.seat) { ev.push({ k: 'bombard', from: u.at, hex: o.hex, dmg: 0 }); continue; }
+    const terr = h.town ? KIND[h.town.kind].def : TER[h.t] ? TER[h.t].def : 1;
+    const dmg = Math.max(1, Math.round(UNIT.art.bombard * (u.str / 10) * (E.eraOf(state, u.seat) >= 1 ? 1.25 : 1) * (0.35 + R() * 0.4) / terr));
+    t.str -= dmg; ev.push({ k: 'bombard', from: u.at, hex: o.hex, dmg, text: `${uname(state, u)} shells ${uname(state, t)} (−${dmg}).` });
+    if (t.str <= 0) kill(state, t, u.seat, ev);
+  }
+  // 4. battles: every march that ended against a hostile unit is an attack; supports join in
+  const occ = E.occupancy(state);
+  const attacks = {};
+  for (const id in state.units) {
+    const u = state.units[id], o = unitOrder(id); if (o.k !== 'move' || u.str <= 0) continue;
+    const goal = o.path[o.path.length - 1]; if (u.at === goal) continue;
+    const t = occ[goal]; if (!t || !hostile(u, t) || hdist(u.at, goal) !== 1) continue;
+    (attacks[goal] = attacks[goal] || []).push(id);
+  }
+  const attackedHexes = new Set(Object.keys(attacks));
+  const supports = [];
+  for (const id in state.units) { const u = state.units[id], o = unitOrder(id); if (o.k === 'support' && u.str > 0 && hdist(u.at, o.hex) <= (u.type === 'art' ? 2 : 1)) supports.push({ id, hex: o.hex, for: o.for, cut: attackedHexes.has(u.at) && !(attacks[u.at] || []).some(a => state.units[a].at === o.hex) }); }
+  for (const s of supports) if (s.cut) ev.push({ k: 'note', hex: state.units[s.id].at, text: `${uname(state, state.units[s.id])} is attacked and cannot give its support.`, seat: state.units[s.id].seat });
+  const fought = new Set();
+  const battleOrder = shuffle(Object.keys(attacks), R);
+  for (const hx of battleOrder) {
+    const def = Object.values(state.units).find(v => v.at === hx); if (!def || def.str <= 0) continue;
+    // attackers grouped by army: the strongest army goes first
+    const bySeat = {};
+    for (const id of attacks[hx]) { const a = state.units[id]; if (!a || a.str <= 0 || hdist(a.at, hx) !== 1 || a.seat === def.seat) continue; (bySeat[a.seat] = bySeat[a.seat] || []).push(a); }
+    const groups = shuffle(Object.entries(bySeat), R).sort((x, y) => y[1].reduce((t, a) => t + a.str, 0) - x[1].reduce((t, a) => t + a.str, 0));
+    for (const [aseat, atts] of groups) {
+      const d = Object.values(state.units).find(v => v.at === hx); if (!d || d.str <= 0) break;
+      if (!hostile(atts[0], d)) break;
+      let A = 0;
+      for (const a of atts) { const cross = H[a.at].t === 'water' || H[hx].t === 'water' ? 0.75 : 1; const vsArt = a.type === 'cav' && (d.type === 'art' || d.str < 4) ? 1.4 : 1; A += power(state, a, 'att', hx, cross * vsArt); }
+      let D = power(state, d, 'def', hx);
+      const sa = [], sd = [];
+      for (const s of supports) { if (s.cut || s.hex !== hx) continue; const su = state.units[s.id]; if (!su || su.str <= 0) continue; if (s.for === +aseat && su.seat !== d.seat) { A += supportPower(state, su, 'att'); sa.push(s.id); } else if (s.for === d.seat && su.seat !== +aseat) { D += supportPower(state, su, 'def'); sd.push(s.id); } }
+      const r = A / Math.max(0.1, D);
+      const dmgD = Math.max(0, Math.round(clamp(3 * r, 0.5, 8) * (0.8 + R() * 0.4)));
+      const dmgA = Math.max(0, Math.round(clamp(2.4 / r, 0, 7) * (0.8 + R() * 0.4)));
+      d.str -= dmgD;
+      const lead = atts.slice().sort((x, y) => y.str - x.str)[0];
+      // the leading regiment takes most of the losses
+      let rem = dmgA; for (const a of [lead, ...atts.filter(x => x !== lead)]) { const take = a === lead ? Math.ceil(rem * 0.7) : Math.ceil(rem / atts.length); a.str -= take; rem -= take; if (rem <= 0) break; }
+      fought.add(d.id); for (const a of atts) fought.add(a.id);
+      const b = { k: 'battle', hex: hx, att: atts.map(a => a.id), def: d.id, aseat: +aseat, dseat: d.seat, A: +A.toFixed(1), D: +D.toFixed(1), dmgA, dmgD, sa, sd, result: '' };
+      if (d.str <= 0) { b.result = 'destroyed'; kill(state, d, +aseat, ev); }
+      else if (r >= 1.3) {
+        const away = nbrs(hx).filter(x => H[x] && isFinite(E.stepCost(state, d.type, hx, x, fronts)) && !Object.values(state.units).some(v => v.at === x) && !atts.some(a => hdist(a.at, x) <= 1)).map(x => [x, -Math.min(...atts.map(a => hdist(a.at, x))) * 10 + (d.seat === NEUTRAL ? 0 : hdist(x, state.seats[d.seat].hq)) + R() * 0.5]).sort((x, y) => x[1] - y[1]).map(x => x[0]);
+        if (away.length) { b.result = 'retreat'; b.to = away[0]; d.at = away[0]; if (d.str < 4) d.str -= 1; }
+        else { b.result = 'surrounded'; d.str -= 2; if (d.str <= 0) { b.result = 'destroyed'; kill(state, d, +aseat, ev); } }
+      } else b.result = 'held';
+      for (const a of atts) if (a.str <= 0) kill(state, a, d.seat, ev);
+      if (b.result === 'destroyed' || b.result === 'retreat') { const adv = atts.filter(a => a.str > 0 && a.type !== 'art' && a.type !== 'gen').sort((x, y) => y.str - x.str)[0]; if (adv && !Object.values(state.units).some(v => v.at === hx && v.str > 0)) { b.adv = adv.id; b.advFrom = adv.at; adv.at = hx; } }
+      b.text = `${uname(state, lead)}${atts.length > 1 ? ` and ${atts.length - 1} more` : ''}${sa.length ? ` (with ${sa.length} in support)` : ''} attack ${uname(state, d)} at ${hexName(state, hx)}: ${b.result === 'held' ? 'the attack is beaten off' : b.result === 'retreat' ? 'the defenders fall back' : b.result === 'surrounded' ? 'the defenders are cut off and badly hurt' : 'the defenders are wiped out'}.`;
+      ev.push(b);
+    }
+  }
+  // marches into hexes left empty by the fighting
+  for (const id of shuffle(Object.keys(state.units), R)) { const u = state.units[id]; if (!u) continue; const o = unitOrder(id); if (o.k !== 'move' || u.str <= 0) continue; const goal = o.path[o.path.length - 1]; if (u.at !== goal && hdist(u.at, goal) === 1 && !Object.values(state.units).some(v => v.at === goal) && isFinite(E.stepCost(state, u.type, u.at, goal, fronts))) { ev.push({ k: 'move', u: id, seat: u.seat, type: u.type, path: [u.at, goal] }); u.at = goal; } }
+  // 5. raids, engineering and digging in
+  for (const id in state.units) {
+    const u = state.units[id], o = unitOrder(id), h = H[u.at]; if (u.str <= 0) continue;
+    if (o.k === 'raid') {
+      let did = false;
+      if (h.rail && !h.railBroken) { h.railBroken = true; did = true; state.seats[u.seat].stats.raids++; }
+      if (h.farm && h.farm.burned <= 0) { const ft = H[h.farm.town]; if (ft && ft.town && ft.town.owner !== u.seat) { h.farm.burned = 3; did = true; } }
+      ev.push({ k: 'raid', hex: u.at, u: id, text: did ? `${uname(state, u)} tears up the railway and burns the farms at ${hexName(state, u.at)}.` : `${uname(state, u)} finds nothing to raid.` });
+    } else if (o.k === 'dig') { const max = E.eraOf(state, u.seat) >= 3 ? 3 : 2; if ((h.ent || 0) < max) { h.ent = (h.ent || 0) + 1; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} digs earthworks (${h.ent}).` }); } }
+    else if (o.k === 'fortify' && h.town && h.town.owner === u.seat && h.town.fort < 3 && state.seats[u.seat].sup >= 2) { state.seats[u.seat].sup -= 2; h.town.fort++; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} fortifies ${h.town.name} (level ${h.town.fort}).` }); }
+    else if (o.k === 'bridge' && state.seats[u.seat].sup >= 3) { const b = H[o.hex]; if (b && b.t === 'water' && !b.bridge) { state.seats[u.seat].sup -= 3; b.bridge = true; ev.push({ k: 'dig', hex: o.hex, text: `${uname(state, u)} throws a bridge across the river.` }); } }
+    else if (o.k === 'repair') { for (const x of [u.at, ...nbrs(u.at)]) if (H[x] && H[x].railBroken) H[x].railBroken = false; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} repairs the railway.` }); }
+    else if (o.k === 'hold' && u.type === 'inf' && !moved[id] && (h.ent || 0) < 1 && !h.town) { h.ent = 1; }
+  }
+  // 6. towns change hands
+  for (const id in state.units) {
+    const u = state.units[id], h = H[u.at]; if (!h.town || u.seat === NEUTRAL || u.type === 'gen' || h.town.owner === u.seat) continue;
+    const prev = h.town.owner; h.town.owner = u.seat;
+    if (prev !== NEUTRAL && h.town.kind === 'hq' && state.seats[prev] && state.seats[prev].hq === u.at) state.seats[prev].stats.hqLost = true;
+    ev.push({ k: 'capture', hex: u.at, seat: u.seat, from: prev, text: `${nameOf(state, u.seat)} take${h.town.kind === 'city' ? 's the Capital,' : 's'} ${h.town.name}${prev === NEUTRAL ? '' : ' from ' + nameOf(state, prev)}.` });
+  }
+  // 7. supply, income and recruits
+  for (const k in H) if (H[k].farm && H[k].farm.burned > 0) H[k].farm.burned--;
+  for (const s of state.seats) {
+    if (!s.alive) continue;
+    let men = 0, sup = 0;
+    for (const k in H) { const h = H[k]; if (h.town && h.town.owner === s.seat) { men += KIND[h.town.kind].men; sup += KIND[h.town.kind].sup; } if (h.farm && h.farm.burned <= 0 && H[h.farm.town] && H[h.farm.town].town.owner === s.seat) sup += 1; }
+    // railway bonus: owned towns joined to the HQ by unbroken rail
+    if (H[s.hq].town.owner === s.seat) { const seen = new Set([s.hq]), q = [s.hq]; let linked = 0; while (q.length) { const c = q.shift(); for (const nb of nbrs(c)) { const x = H[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); if (x.town && x.town.owner === s.seat) linked++; } } } sup += linked; }
+    const mine = Object.values(state.units).filter(u => u.seat === s.seat);
+    const up = mine.reduce((t, u) => t + UNIT[u.type].up, 0);
+    s.men += men; s.sup += sup - up;
+    s.income = { men, sup, up };
+    if (s.sup < 0) { s.sup = 0; for (const u of mine) u.str -= 1; ev.push({ k: 'note', text: `${s.name || COLORS[s.seat].name} cannot feed its army: every unit loses men.`, seat: s.seat }); }
+    for (const u of mine) {
+      const w = E.weatherAt(fronts, u.at);
+      if (!E.inSupply(state, u)) { u.str -= w === 'snow' ? 2 : 1; ev.push({ k: 'attrition', hex: u.at, u: u.id, text: `${uname(state, u)} is out of supply${w === 'snow' ? ' in the snow' : ''} and loses men.` }); }
+      else if (u.str < 10 && !fought.has(u.id)) { const inTown = H[u.at].town && H[u.at].town.owner === s.seat, cost = inTown ? 1 : 2; if (s.sup >= cost && (inTown || !moved[u.id])) { u.str += 1; s.sup -= cost; } }
+    }
+  }
+  for (const id in state.units) if (state.units[id].str <= 0) kill(state, state.units[id], null, ev);
+  for (let s = 0; s < state.n; s++) {
+    if (!state.seats[s].alive) continue;
+    for (const r of O[s].recruit) {
+      const h = H[r.hex], T = UNIT[r.type], st = state.seats[s];
+      if (!h.town || h.town.owner !== s || Object.values(state.units).some(v => v.at === r.hex) || st.men < T.men || st.sup < T.sup) continue;
+      st.men -= T.men; st.sup -= T.sup; const id = 'u' + state.nextId++; state.units[id] = { id, seat: s, type: r.type, at: r.hex, str: r.type === 'gen' ? 10 : 8 };
+      ev.push({ k: 'recruit', hex: r.hex, seat: s, type: r.type, text: `${nameOf(state, s)} raise new ${UNIT[r.type].name.toLowerCase()} at ${h.town.name}.` });
+    }
+  }
+  // 8. eliminations
+  for (const s of state.seats) {
+    if (!s.alive) continue;
+    if (E.townCount(state, s.seat) === 0) { s.alive = false; for (const u of Object.values(state.units)) if (u.seat === s.seat) { u.seat = NEUTRAL; if (u.type === 'gen') delete state.units[u.id]; } ev.push({ k: 'out', seat: s.seat, text: `${nameOf(state, s.seat)} has lost every town and is out of the war. Its remaining regiments go their own way.` }); }
+  }
+  // 9. the capital, the calendar, eras and the end of the war
+  const cap = H[state.center].town.owner;
+  if (cap !== NEUTRAL && cap === state.capitalHold.seat) state.capitalHold.count++; else state.capitalHold = { seat: cap === NEUTRAL ? null : cap, count: cap === NEUTRAL ? 0 : 1 };
+  const eraBefore = Math.min(3, Math.floor((state.turn - 1) / state.eraTurns));
+  state.turn++;
+  const eraAfter = Math.min(3, Math.floor((state.turn - 1) / state.eraTurns));
+  if (eraAfter > eraBefore) ev.push({ k: 'era', text: `${ERAS[eraAfter].year}: ${ERAS[eraAfter].name}. ${ERAS[eraAfter].text}` });
+  advanceWeather(state, false); makeForecast(state);
+  const alive = state.seats.filter(s => s.alive);
+  let winner = null, why = '';
+  if (state.mode === 'capital' && state.capitalHold.seat !== null && state.capitalHold.count >= 4) { winner = state.capitalHold.seat; why = `${nameOf(state, winner)} held the Capital for four months.`; }
+  if (state.mode === 'conquest' && alive.length === 1) { winner = alive[0].seat; why = `${nameOf(state, winner)} is the last army standing.`; }
+  if (alive.length === 1 && winner === null) { winner = alive[0].seat; why = 'Every other army has been destroyed.'; }
+  if (state.mode === 'points' && winner === null) { const all = Object.values(H).filter(h => h.town).length; for (const s of alive) if (E.townCount(state, s.seat) >= Math.ceil(all * 0.55)) { winner = s.seat; why = `${nameOf(state, s.seat)} controls more than half the country.`; } }
+  if (winner === null && state.turn > state.turnLimit) why = 'The war ends in exhaustion. Victory goes to the strongest position.';
+  if (winner !== null || state.turn > state.turnLimit) {
+    const scores = state.seats.map(s => ({ seat: s.seat, ...E.score(state, s.seat, true) }));
+    if (winner === null) winner = scores.filter(x => state.seats[x.seat].alive).sort((a, b) => b.vp - a.vp)[0].seat;
+    state.over = { winner, why, scores, goals: state.seats.map(s => ({ seat: s.seat, goal: s.goal, met: E.goalMet(state, s.seat) })) };
+    ev.push({ k: 'end', text: why });
+  }
+  // who saw what
+  const fronts2 = state.weather.fronts;
+  const visAfter = state.seats.map(s => E.visibleSet(state, s.seat, fronts2));
+  for (const e of ev) {
+    if (e.vis !== undefined && e.vis !== null) continue;
+    const hx = [e.hex, e.from, e.to, e.advFrom, ...(e.path || [])].filter(Boolean);
+    if (!hx.length || e.k === 'era' || e.k === 'end' || e.k === 'out' || e.k === 'capture') { e.vis = state.seats.map(s => s.seat); continue; }
+    e.vis = state.seats.filter(s => (e.seat === s.seat) || hx.some(x => visBefore[s.seat].has(x) || visAfter[s.seat].has(x))).map(s => s.seat);
+  }
+  state.lastEvents = ev;
+  for (const e of ev) if (e.text) log.push({ turn: state.turn - 1, text: e.text, vis: e.vis });
+  state.log = state.log.concat(log.map(l => ({ ...l, vis: l.vis || state.seats.map(s => s.seat) }))).slice(-400);
+  for (const s of state.seats) s.submitted = false;
+  state.orders = {};
+  return ev;
+};
+function shuffle(a, R) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function kill(state, u, by, ev) {
+  if (!state.units[u.id]) return;
+  delete state.units[u.id];
+  if (by !== null && by !== undefined && by !== NEUTRAL && state.seats[by] && u.seat !== by) state.seats[by].stats.kills++;
+  ev.push({ k: 'destroyed', hex: u.at, u: u.id, seat: u.seat, type: u.type, text: `${uname(state, u)} is destroyed.` });
+}
+function nameOf(state, s) { if (s === NEUTRAL || s === null || s === undefined) return 'Local militia'; const st = state.seats[s]; return st.name || `the ${COLORS[s].name} army`; }
+function uname(state, u) { return `${u.seat === NEUTRAL ? 'Militia' : (state.seats[u.seat].name || COLORS[u.seat].name)} ${UNIT[u.type].name.toLowerCase()}`; }
+function hexName(state, k) { const h = state.hexes[k]; if (h.town) return h.town.name; const near = Object.keys(state.hexes).filter(x => state.hexes[x].town).sort((a, b) => hdist(a, k) - hdist(b, k))[0]; return `near ${state.hexes[near].town.name}`; }
+E.nameOf = nameOf; E.uname = uname; E.hexName = hexName;
+
+/* ---------------- the computer generals ---------------- */
+E.botOrders = function (state, seat) {
+  const H = state.hexes, s = state.seats[seat], R = rng((state.seed + state.turn * 7919 + seat * 104729) >>> 0);
+  const units = Object.values(state.units).filter(u => u.seat === seat);
+  const occ = E.occupancy(state), fronts = state.weather.fronts;
+  const out = { units: {}, recruit: [], diplo: { sight: state.rel.sight[seat].slice(), passage: state.rel.passage[seat].slice(), gift: [] } };
+  const myTowns = Object.keys(H).filter(k => H[k].town && H[k].town.owner === seat);
+  const targets = Object.keys(H).filter(k => H[k].town && H[k].town.owner !== seat);
+  const claimed = new Set();
+  const enemies = Object.values(state.units).filter(u => u.seat !== seat);
+  const threat = k => enemies.filter(e => hdist(e.at, k) <= 2).reduce((t, e) => t + e.str * UNIT[e.type].atk, 0);
+  const hq = s.hq;
+  // keep a garrison at headquarters if enemies are close
+  const hqThreat = threat(hq);
+  for (const u of units.map(u => [u, hdist(u.at, hq) + R() * 0.5]).sort((a, b) => a[1] - b[1]).map(x => x[0])) {
+    if (u.type === 'gen') continue;
+    const rc = E.reach(state, u, occ, fronts, R);
+    // artillery shells the nearest enemy in range
+    if (u.type === 'art') {
+      const t = enemies.filter(e => hdist(e.at, u.at) <= 2 && hdist(e.at, u.at) >= 1).sort((a, b) => a.str - b.str + (R() - 0.5) * 0.1)[0];
+      if (t) { out.units[u.id] = { k: 'bombard', hex: t.at }; continue; }
+    }
+    // a weak enemy next door is worth attacking
+    const adjE = enemies.filter(e => hdist(e.at, u.at) === 1 && isFinite(E.stepCost(state, u.type, u.at, e.at, fronts)));
+    const best = adjE.map(e => ({ e, r: power(state, u, 'att', e.at) / power(state, e, 'def', e.at) + R() * 0.01 })).sort((a, b) => b.r - a.r)[0];
+    if (best && (best.r > 0.9 || (best.e.seat === NEUTRAL && best.r > 0.6)) && u.type !== 'eng' && u.str >= 4) { out.units[u.id] = { k: 'move', path: [best.e.at] }; claimed.add(best.e.at); continue; }
+    if (u.at === hq && hqThreat > 10 && u.type === 'inf') { out.units[u.id] = { k: 'hold' }; continue; }
+    if (u.str <= 3 && myTowns.length) { const home = myTowns.map(t => [t, hdist(t, u.at) + R() * 0.5]).sort((a, b) => a[1] - b[1])[0][0]; const p = E.pathTo(rc, u.at, nearestReach(rc, home)); if (p && p.length) { out.units[u.id] = { k: 'move', path: p }; continue; } }
+    if (u.type === 'eng') { if (H[u.at].town && H[u.at].town.owner === seat && H[u.at].town.fort < 2 && s.sup > 8) { out.units[u.id] = { k: 'fortify' }; continue; } if (H[u.at].railBroken || nbrs(u.at).some(x => H[x] && H[x].railBroken)) { out.units[u.id] = { k: 'repair' }; continue; } }
+    if (u.type === 'cav' && H[u.at].rail && !H[u.at].railBroken && !myTowns.includes(nearestTown(state, u.at))) { out.units[u.id] = { k: 'raid' }; continue; }
+    // otherwise march on the nearest town that is not ours
+    const jit = {}; for (const t of targets) jit[t] = R() * 0.5;
+    const sc = t => hdist(t, u.at) + (H[t].town.kind === 'city' ? -2 : 0) + (occ[t] && occ[t].str > u.str ? 3 : 0) + jit[t];
+    const goal = targets.filter(t => !claimed.has(t)).sort((a, b) => sc(a) - sc(b))[0];
+    if (goal) {
+      claimed.add(goal);
+      const dest = nearestReach(rc, goal, false, R);
+      if (dest && dest !== u.at) { const p = E.pathTo(rc, u.at, dest); if (p && p.length) { const last = p[p.length - 1]; if (occ[last] && E.relFriendly(state, seat, occ[last].seat)) p.pop(); if (p.length) { out.units[u.id] = { k: 'move', path: p }; continue; } } }
+    }
+    out.units[u.id] = { k: u.type === 'eng' && !H[u.at].town ? 'dig' : 'hold' };
+  }
+  // the general rides with the biggest group
+  const g = units.find(u => u.type === 'gen');
+  if (g) { const others = units.filter(u => u.type !== 'gen'); if (others.length) { const c = others.sort((a, b) => hdist(a.at, g.at) - hdist(b.at, g.at))[Math.floor(others.length / 2)]; const rc = E.reach(state, g, occ, fronts, R); const dest = nearestReach(rc, c.at, true); const p = dest && E.pathTo(rc, g.at, dest); if (p && p.length) out.units[g.id] = { k: 'move', path: p }; } }
+  // supports: idle units next to an attacked hex help
+  for (const u of units) { if (out.units[u.id] && out.units[u.id].k !== 'hold') continue; const atk = Object.values(out.units).find(o => o.k === 'move' && o.path.length === 1 && hdist(o.path[0], u.at) === 1 && occ[o.path[0]] && occ[o.path[0]].seat !== seat); if (atk) out.units[u.id] = { k: 'support', hex: atk.path[0], for: seat }; }
+  // recruitment
+  const count = units.filter(u => u.type !== 'gen').length, cap = E.unitCap(state, seat);
+  let men = s.men, sup = s.sup, n = count;
+  // headquarters first, then the towns nearest the front (the Capital), with a little chance mixed in
+  const rq = {}; for (const t of myTowns) rq[t] = (H[t].town.kind === 'hq' ? -100 : 0) + hdist(t, state.center) + R() * 0.9;
+  for (const t of myTowns.slice().sort((a, b) => rq[a] - rq[b])) {
+    if (occ[t] || n >= cap) continue;
+    const kind = H[t].town.kind;
+    const want = !g && kind === 'hq' ? 'gen' : (R() < 0.18 && kind !== 'town' ? 'art' : R() < 0.25 ? 'cav' : 'inf');
+    const T = UNIT[want]; if (men >= T.men && sup >= T.sup + 3) { out.recruit.push({ hex: t, type: want }); men -= T.men; sup -= T.sup; if (want !== 'gen') n++; }
+  }
+  return out;
+};
+function nearestReach(rc, goal, allowOcc, R) { let best = null, bd = 1e9; for (const k in rc.best) { const d = hdist(k, goal) * 10 + rc.best[k] + (R ? R() * 0.3 : 0); if (d < bd) { bd = d; best = k; } } return best; }
+function nearestTown(state, k) { let best = null, bd = 1e9; for (const x in state.hexes) if (state.hexes[x].town) { const d = hdist(x, k) + hdist(x, state.center) * 0.01; if (d < bd) { bd = d; best = x; } } return best; }
+
+if (typeof module !== 'undefined' && module.exports) module.exports = E; else root.Engine = E;
+})(typeof window !== 'undefined' ? window : globalThis);
+/* ============================================================================
+   THE LONG CAMPAIGN — the player's table
+   Designed and built by Claude (Anthropic) with Dave.
+   ============================================================================ */
+(function () {
+'use strict';
+const E = window.Engine, U = E.util, { K, P, hdist, nbrs } = U;
+const $ = s => document.querySelector(s);
+const el = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { if (k === 'class') e.className = attrs[k]; else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]); else if (k === 'html') e.innerHTML = attrs[k]; else if (attrs[k] !== false && attrs[k] !== null && attrs[k] !== undefined) e.setAttribute(k, attrs[k]); } for (const c of kids.flat()) if (c !== null && c !== undefined && c !== false) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ---------------- pixel geometry ---------------- */
+const HW = 22, HH = 24, DY = 18;            // hex width, height and row step in base pixels
+let V = null, api = null, OFF = [0, 0], MAPW = 0, MAPH = 0;
+const hexXY = k => { const [q, r] = P(k); return [OFF[0] + q * HW + r * HW / 2, OFF[1] + r * DY]; };
+const MASK = (() => { const m = []; for (let y = 0; y < HH; y++) { const row = []; for (let x = 0; x < HW; x++) { const px = x + 0.5 - HW / 2, py = y + 0.5; let hw; if (py < 6) hw = (HW / 2) * py / 6; else if (py <= 18) hw = HW / 2; else hw = (HW / 2) * (24 - py) / 6; row.push(Math.abs(px) <= hw + 0.01); } m.push(row); } return m; })();
+function pixToHex(px, py) {
+  // nearest hex centre wins
+  let best = null, bd = 1e9; const r0 = Math.round((py - OFF[1] - HH / 2) / DY);
+  for (let r = r0 - 1; r <= r0 + 1; r++) { const q0 = Math.round((px - OFF[0] - HW / 2 - r * HW / 2) / HW); for (let q = q0 - 1; q <= q0 + 1; q++) { const k = K(q, r); if (!V.hexes[k]) continue; const [x, y] = hexXY(k); const d = (px - x - HW / 2) ** 2 + ((py - y - HH / 2) * 1.1) ** 2; if (d < bd) { bd = d; best = k; } } }
+  return bd < 200 ? best : null;
+}
+/* ---------------- colours ---------------- */
+const hex2 = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+const SEASON_GRASS = { spring: ['#5a9a38', '#66a640', '#74b04a'], summer: ['#5e9a32', '#6aa63a', '#7ab244'], autumn: ['#8a9440', '#9a9e48', '#aaa654'], winter: ['#c4ccd0', '#d2d8da', '#e2e6e8'] };
+const PAL = i => i === E.NEUTRAL ? { c: '#6e6250', C: '#4e4434', l: '#8e8270', h: '#3a3024', H: '#2a2018', t: '#7a6a50', T: '#5e5038', ui: '#8a7a5a', name: 'Militia' } : E.COLORS[i];
+const FLAGC = i => i === E.NEUTRAL ? '#e8e0cc' : E.COLORS[i].ui;
+
+/* ---------------- sprites (original pixel art) ---------------- */
+const SPR = {
+  inf: ['.hhh.g', '.hHHHg', '..ss.m', '.ccc.m', '.cccsm', '.cbc.m', '.ttt..', '.t.t..', '.t.t..', '.k.k..'],
+  cav: ['......hhh...', '......hHH...', '......ss....', '.....cccs...', '....aataaa.a', '..aaaaaaaaaA', '.naaaaaaaaaA', 'n..aaaaaaa..', '...a.a..a.a.', '...k.k..k.k.'],
+  art: ['..........', '.www......', 'w.w.wBBBBB', 'wwXwwBBBBo', 'w.w.w.....', '.www......'],
+  eng: ['.hhh..', '.hHHH.', '..ss..', '.ccc.e', '.cccse', '.cbc.e', '.ttt.E', '.t.t..', '.t.t..', '.k.k..'],
+  gen: ['......hhh...', '......HHH...', '......ss....', '.....cyc....', '....aacaaa.a', '..aaaaaaaaaA', '.naaaaaaaaaA', 'n..aaaaaaa..', '...a.a..a.a.', '...k.k..k.k.'],
+  tree: ['.ooo.', 'oGLGo', 'oGGdo', '.oTo.'],
+  pine: ['..o..', '.oLo.', 'oGGdo', 'ooooo', '..T..']
+};
+const SPRC = new Map();
+function sprite(name, pal) {
+  const key = name + JSON.stringify(pal); let c = SPRC.get(key); if (c) return c;
+  const g = SPR[name], h = g.length, w = Math.max(...g.map(r => r.length));
+  c = document.createElement('canvas'); c.width = w + 2; c.height = h + 2; const x = c.getContext('2d');
+  const on = (i, j) => j >= 0 && j < h && i >= 0 && i < g[j].length && g[j][i] !== '.' && pal[g[j][i]];
+  x.fillStyle = '#17110a'; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (on(i, j)) for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!on(i + di, j + dj)) x.fillRect(i + di + 1, j + dj + 1, 1, 1);
+  for (let j = 0; j < h; j++) for (let i = 0; i < g[j].length; i++) { const col = pal[g[j][i]]; if (g[j][i] === '.' || !col) continue; x.fillStyle = col; x.fillRect(i + 1, j + 1, 1, 1); }
+  SPRC.set(key, c); return c;
+}
+const COMMON = { s: '#eab88e', k: '#1d150e', b: '#1d150e', m: '#7c5430', g: '#dcdcdc', n: '#4a3220', a: '#7c4a24', A: '#5a3418', w: '#6e4826', X: '#2e2a26', o: '#0e0c0a', B: '#a8843c', e: '#8a8a8a', E: '#5a4a3a', y: '#e0b440' };
+function unitPal(seat) { const p = PAL(seat); return { ...COMMON, c: p.c, C: p.C, l: p.l, h: p.h, H: p.H, t: p.t, T: p.T }; }
+
+/* ---------------- the base map, drawn once per turn ---------------- */
+let baseCanvas = null, dynCanvas = null, dyn = null, view = { x: 0, y: 0, z: 2 }, canvas, ctx;
+function buildBase() {
+  const R = V.R; OFF = [R * HW + HW, 4 - (-R) * DY]; OFF = [Math.round(R * HW * 1.0 + 6), Math.round(R * DY + 6)];
+  // centre the board: hex (0,0) at OFF
+  let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+  for (const k in V.hexes) { const [q, r] = P(k); const x = q * HW + r * HW / 2, y = r * DY; minx = Math.min(minx, x); maxx = Math.max(maxx, x); miny = Math.min(miny, y); maxy = Math.max(maxy, y); }
+  OFF = [-minx + 6, -miny + 14]; MAPW = Math.ceil(maxx - minx + HW + 12); MAPH = Math.ceil(maxy - miny + HH + 20);
+  baseCanvas = document.createElement('canvas'); baseCanvas.width = MAPW; baseCanvas.height = MAPH;
+  dynCanvas = document.createElement('canvas'); dynCanvas.width = MAPW; dynCanvas.height = MAPH; dyn = dynCanvas.getContext('2d');
+  const g = baseCanvas.getContext('2d'), img = g.createImageData(MAPW, MAPH), D = img.data;
+  const season = E.dateOf(V, V.turn).season, grass = SEASON_GRASS[season].map(hex2), winter = season === 'winter';
+  const put = (x, y, c) => { if (x < 0 || y < 0 || x >= MAPW || y >= MAPH) return; const i = (y * MAPW + x) * 4; D[i] = c[0]; D[i + 1] = c[1]; D[i + 2] = c[2]; D[i + 3] = 255; };
+  const sea = hex2('#1e2a1e');
+  for (let i = 0; i < MAPW * MAPH; i++) { D[i * 4] = 24; D[i * 4 + 1] = 20; D[i * 4 + 2] = 14; D[i * 4 + 3] = 255; }
+  const rnd = (x, y, s) => { const n = Math.sin(x * 12.9898 + y * 78.233 + s * 37.719) * 43758.5453; return n - Math.floor(n); };
+  const colorFor = (h, x, y, X, Y) => {
+    const r = rnd(X, Y, 1), t = h.t;
+    if (t === 'water') { if (h.ford) return r < 0.12 ? hex2('#b8b0a0') : r < 0.3 ? hex2('#8ab8ea') : hex2('#5c92d6'); return r < 0.06 ? hex2('#9ac0f0') : r < 0.5 ? hex2(winter ? '#7090b0' : '#3d6fc0') : hex2(winter ? '#6886a6' : '#3a68b8'); }
+    if (t === 'hills') { const shade = y < 9 ? (winter ? '#f0f2f2' : '#a8b860') : y < 15 ? (winter ? '#d8dcdc' : '#8a9a48') : (winter ? '#b8bec0' : '#6e7c38'); return r < 0.05 ? hex2('#5e5a40') : hex2(shade); }
+    if (t === 'woods') return r < 0.5 ? hex2(winter ? '#a8b0aa' : '#4a7a30') : hex2(winter ? '#9aa49e' : '#406e2a');
+    if (h.farm) { if (h.farm.burned > 0) return r < 0.3 ? hex2('#3a2e24') : hex2('#4a3a2c'); return (Math.floor((X + Y * 2) / 2) % 2) ? hex2(winter ? '#d8d2c4' : '#c8a050') : hex2(winter ? '#c8c0b0' : '#a8803e'); }
+    const lev = Math.min(2, Math.floor(r * 3.3)); return r < 0.03 ? hex2(winter ? '#a0a8ac' : '#4e862a') : grass[lev];
+  };
+  for (const k in V.hexes) {
+    const h = V.hexes[k], [x0, y0] = hexXY(k);
+    for (let y = 0; y < HH; y++) for (let x = 0; x < HW; x++) if (MASK[y][x]) put(Math.round(x0) + x, Math.round(y0) + y, colorFor(h, x, y, Math.round(x0) + x, Math.round(y0) + y));
+  }
+  g.putImageData(img, 0, 0);
+  // roads and railways between neighbouring hexes
+  const line = (a, b, col, w) => { const [ax, ay] = hexXY(a), [bx, by] = hexXY(b); pline(g, ax + HW / 2, ay + HH / 2, bx + HW / 2, by + HH / 2, col, w); };
+  const drawn = new Set();
+  for (const k in V.hexes) { const h = V.hexes[k]; if (!h.road && !h.town) continue; for (const nb of nbrs(k)) { const o = V.hexes[nb]; if (!o || !(o.road || o.town) || !(h.road || o.road)) continue; const id = k < nb ? k + nb : nb + k; if (drawn.has(id)) continue; drawn.add(id); line(k, nb, winter ? '#b8a888' : '#c8a46a', 3); } }
+  for (const k in V.hexes) { const h = V.hexes[k]; if (!h.rail) continue; for (const nb of nbrs(k)) { const o = V.hexes[nb]; if (!o || !o.rail) continue; const id = 'r' + (k < nb ? k + nb : nb + k); if (drawn.has(id)) continue; drawn.add(id); const broken = h.railBroken || o.railBroken; const [ax, ay] = hexXY(k), [bx, by] = hexXY(nb); const L = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / L, uy = (by - ay) / L; for (let s = 0; s < L; s += 3) { const px = ax + HW / 2 + ux * s, py = ay + HH / 2 + uy * s; g.fillStyle = broken ? '#7a3a20' : '#3a2a1a'; g.fillRect(Math.round(px - uy * 2), Math.round(py + ux * 2), 1, 1); g.fillRect(Math.round(px + uy * 2), Math.round(py - ux * 2), 1, 1); if (!broken || s % 6) { g.fillStyle = broken ? '#a05030' : '#6a5a4a'; g.fillRect(Math.round(px), Math.round(py), 1, 1); } } } }
+  // bridges, trees, hills, towns, farms
+  for (const k in V.hexes) {
+    const h = V.hexes[k], [x0, y0] = hexXY(k), cx = Math.round(x0 + HW / 2), cy = Math.round(y0 + HH / 2);
+    if (h.t === 'water' && h.bridge) { g.fillStyle = '#3a2412'; g.fillRect(cx - 7, cy - 4, 14, 8); g.fillStyle = '#9a6a3a'; g.fillRect(cx - 6, cy - 3, 12, 6); g.fillStyle = '#7a5028'; for (let i = -5; i < 6; i += 2) g.fillRect(cx + i, cy - 3, 1, 6); }
+    if (h.t === 'woods') { const pal = winter ? { o: '#1e2a1e', G: '#3a5040', L: '#f4f6f6', d: '#2a382c', T: '#4a3420' } : { o: '#10240a', G: '#2e6a1e', L: '#7cc04a', d: '#1e4a14', T: '#5a3a1e' }; const sp = sprite(winter ? 'pine' : 'tree', pal); for (const [dx, dy] of [[-7, -7], [1, -9], [-3, -2], [4, -3], [-8, 2], [1, 3], [6, 2]]) g.drawImage(sp, cx + dx - 2, cy + dy - 2); }
+    if (h.t === 'hills') { g.fillStyle = winter ? '#ffffff' : '#c8d47a'; for (let i = -6; i <= 6; i++) { const yy = cy - 2 - Math.round(Math.sqrt(Math.max(0, 36 - i * i)) * 0.6); g.fillRect(cx + i, yy, 1, 1); } g.fillStyle = winter ? '#9aa0a2' : '#4e5a26'; for (let i = -6; i <= 6; i += 2) { g.fillRect(cx + i, cy + 2 + (i % 4 ? 1 : 0), 1, 2); } }
+    if (h.town) drawTown(g, h, cx, cy);
+  }
+  // board edge
+  g.strokeStyle = '#0c0a06'; g.lineWidth = 1;
+}
+function pline(g, x0, y0, x1, y1, col, w) {
+  g.fillStyle = col; const L = Math.hypot(x1 - x0, y1 - y0), n = Math.max(1, Math.round(L));
+  for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n; g.fillRect(Math.round(x - w / 2), Math.round(y - w / 2), w, w); }
+}
+function drawTown(g, h, cx, cy) {
+  const t = h.town, own = t.owner, flag = FLAGC(own);
+  const house = (x, y, w, hh, roof) => { g.fillStyle = '#17110a'; g.fillRect(x - 1, y - 1, w + 2, hh + 2); g.fillStyle = roof; g.fillRect(x, y, w, Math.ceil(hh / 2)); g.fillStyle = '#ece2c6'; g.fillRect(x, y + Math.ceil(hh / 2), w, Math.floor(hh / 2)); g.fillStyle = '#2a2e40'; g.fillRect(x + 1, y + hh - 2, 1, 1); if (w > 4) g.fillRect(x + w - 2, y + hh - 2, 1, 1); };
+  if (t.kind === 'city') { house(cx - 8, cy - 5, 6, 6, '#a84a2c'); house(cx + 1, cy - 7, 7, 7, '#8a3a24'); house(cx - 5, cy + 2, 6, 5, '#b05a34'); house(cx + 3, cy + 2, 5, 5, '#9a4028'); g.fillStyle = '#e8e2d2'; g.fillRect(cx - 1, cy - 10, 2, 8); g.fillStyle = '#17110a'; g.fillRect(cx - 1, cy - 11, 2, 1); /* dome */ g.fillStyle = '#d8d0c0'; g.fillRect(cx - 2, cy - 9, 4, 2); }
+  else if (t.kind === 'hq') { g.fillStyle = '#17110a'; g.fillRect(cx - 8, cy - 5, 16, 11); g.fillStyle = '#8a7a5a'; g.fillRect(cx - 7, cy - 4, 14, 9); g.fillStyle = '#6a5a40'; for (let i = -7; i < 7; i += 2) g.fillRect(cx + i, cy - 5, 1, 1); g.fillStyle = '#ece2c6'; g.fillRect(cx - 3, cy - 2, 6, 5); g.fillStyle = '#a84a2c'; g.fillRect(cx - 3, cy - 3, 6, 2); }
+  else { house(cx - 6, cy - 4, 5, 5, '#b05a34'); house(cx + 1, cy - 6, 5, 6, '#8a3a24'); house(cx - 2, cy + 2, 5, 4, '#a84a2c'); }
+  // owner's flag
+  const fx = cx + 6, fy = cy - 12; g.fillStyle = '#3a2412'; g.fillRect(fx, fy, 1, 9); g.fillStyle = '#17110a'; g.fillRect(fx + 1, fy - 1, 7, 6); g.fillStyle = flag; g.fillRect(fx + 1, fy, 6, 4); if (own === E.NEUTRAL) { g.fillStyle = '#b8b0a0'; g.fillRect(fx + 1, fy + 3, 6, 1); }
+  for (let i = 0; i < (t.fort || 0); i++) { g.fillStyle = '#5a5248'; g.fillRect(cx - 9 + i * 3, cy + 7, 2, 2); }
+}
+
+/* ---------------- drawing each frame ---------------- */
+let sel = null, reachCache = null, mode = null, modeData = null, orders = { units: {}, recruit: [], diplo: null }, hover = null, anim = null, lastFrame = 0, toastT = 0;
+function occupancy() { return E.occupancy({ units: V.units }); }
+function draw(now) {
+  requestAnimationFrame(draw);
+  if (!V || !baseCanvas) return;
+  const dt = Math.min(0.05, (now - lastFrame) / 1000 || 0); lastFrame = now;
+  const g = dyn; g.clearRect(0, 0, MAPW, MAPH); g.imageSmoothingEnabled = false;
+  g.drawImage(baseCanvas, 0, 0);
+  const vis = new Set(V.visible);
+  // fog of war
+  g.fillStyle = 'rgba(16,12,8,0.42)';
+  for (const k in V.hexes) if (!vis.has(k)) { const [x0, y0] = hexXY(k); fillHex(g, x0, y0); }
+  // entrenchments
+  for (const k in V.hexes) { const h = V.hexes[k]; if (!h.ent) continue; const [x0, y0] = hexXY(k); g.fillStyle = '#5a3e22'; for (let i = 0; i < h.ent; i++) g.fillRect(Math.round(x0 + 4), Math.round(y0 + 18 - i * 2), HW - 8, 1); }
+  // weather
+  drawWeather(g, now / 1000);
+  // reachable hexes for the selected unit
+  if (sel && reachCache && !anim && !mode) {
+    const occ = occupancy();
+    for (const k in reachCache.best) { if (k === sel.at) continue; const [x0, y0] = hexXY(k); const o = occ[k]; g.fillStyle = o && o.seat !== V.me ? 'rgba(220,50,30,0.38)' : 'rgba(255,230,120,0.28)'; fillHex(g, x0, y0); }
+  }
+  if (mode && modeData && modeData.targets) for (const k of modeData.targets) { const [x0, y0] = hexXY(k); g.fillStyle = mode === 'support' ? 'rgba(80,200,255,0.35)' : mode === 'bombard' ? 'rgba(255,120,40,0.4)' : 'rgba(120,255,160,0.35)'; fillHex(g, x0, y0); }
+  // order arrows
+  for (const id in orders.units) { const u = V.units[id], o = orders.units[id]; if (!u) continue; drawOrder(g, u, o); }
+  // units (or the replay)
+  if (anim) drawReplay(g, now / 1000); else for (const id in V.units) drawUnit(g, V.units[id], null, now / 1000);
+  // recruits ordered
+  for (const r of orders.recruit) { const [x0, y0] = hexXY(r.hex); g.fillStyle = 'rgba(255,240,180,0.9)'; g.fillRect(Math.round(x0 + HW / 2 - 4), Math.round(y0 + 3), 8, 1); g.globalAlpha = 0.6; blitUnit(g, r.type, V.me, x0 + HW / 2, y0 + HH / 2 + 2, false, now / 1000); g.globalAlpha = 1; }
+  if (sel) { const [x0, y0] = hexXY(sel.at); outlineHex(g, x0, y0, '#ffd84a'); }
+  if (hover) { const [x0, y0] = hexXY(hover); outlineHex(g, x0, y0, 'rgba(255,255,255,0.6)'); }
+  // to the screen
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#18140e'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const dpr = window.devicePixelRatio || 1, z = view.z * dpr;
+  ctx.imageSmoothingEnabled = false;
+  ctx.setTransform(z, 0, 0, z, Math.round(-view.x * z + canvas.width / 2), Math.round(-view.y * z + canvas.height / 2));
+  ctx.drawImage(dynCanvas, 0, 0);
+  // strength plates in screen resolution
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (!anim) for (const id in V.units) { const u = V.units[id]; const [x0, y0] = hexXY(u.at); const [sx, sy] = toScreen(x0 + HW / 2, y0 + HH - 3); plate(sx, sy, u.str, u.seat); }
+  if (anim) { const t = (now / 1000 - anim.t0); for (const f of anim.flashes) if (t >= f.t && t < f.t + 1.4) { const [x0, y0] = hexXY(f.hex); const [sx, sy] = toScreen(x0 + HW / 2, y0 - 2); ctx.font = `bold ${Math.max(11, 4 * view.z)}px Georgia, serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#17110a'; ctx.strokeText(f.label, sx, sy - (t - f.t) * 10); ctx.fillStyle = f.col; ctx.fillText(f.label, sx, sy - (t - f.t) * 10); } }
+  if (view.z >= 3) for (const k in V.hexes) { const h = V.hexes[k]; if (!h.town) continue; const [x0, y0] = hexXY(k); const [sx, sy] = toScreen(x0 + HW / 2, y0 + HH + 1); ctx.font = `${Math.round(view.z * 3.4)}px "IM Fell English", Georgia, serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,14,8,0.85)'; ctx.strokeText(h.town.name, sx, sy + 6); ctx.fillStyle = h.town.kind === 'city' ? '#ffe9a8' : '#f2e7c9'; ctx.fillText(h.town.name, sx, sy + 6); }
+}
+function toScreen(x, y) { const dpr = window.devicePixelRatio || 1; return [(x - view.x) * view.z + canvas.width / dpr / 2, (y - view.y) * view.z + canvas.height / dpr / 2]; }
+function fromScreen(sx, sy) { const dpr = window.devicePixelRatio || 1; return [(sx - canvas.width / dpr / 2) / view.z + view.x, (sy - canvas.height / dpr / 2) / view.z + view.y]; }
+function plate(sx, sy, str, seat) {
+  const w = 14, h = 11; ctx.fillStyle = '#17110a'; ctx.fillRect(Math.round(sx - w / 2) - 1, Math.round(sy) - 1, w + 2, h + 2); ctx.fillStyle = FLAGC(seat); ctx.fillRect(Math.round(sx - w / 2), Math.round(sy), w, h);
+  ctx.fillStyle = seat === E.NEUTRAL || (E.COLORS[seat] && (E.COLORS[seat].id === 'gold' || E.COLORS[seat].id === 'grey')) ? '#17110a' : '#fff'; ctx.font = 'bold 10px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(Math.max(0, Math.round(str))), Math.round(sx), Math.round(sy + h / 2 + 0.5)); ctx.textBaseline = 'alphabetic';
+}
+function fillHex(g, x0, y0) { x0 = Math.round(x0); y0 = Math.round(y0); for (let y = 0; y < HH; y++) { let a = -1, b = -1; for (let x = 0; x < HW; x++) if (MASK[y][x]) { if (a < 0) a = x; b = x; } if (a >= 0) g.fillRect(x0 + a, y0 + y, b - a + 1, 1); } }
+function outlineHex(g, x0, y0, col) { x0 = Math.round(x0); y0 = Math.round(y0); g.fillStyle = col; for (let y = 0; y < HH; y++) for (let x = 0; x < HW; x++) { if (!MASK[y][x]) continue; const edge = y === 0 || y === HH - 1 || x === 0 || x === HW - 1 || !MASK[y - 1][x] || !MASK[y + 1][x] || !MASK[y][x - 1] || !MASK[y][x + 1]; if (edge) g.fillRect(x0 + x, y0 + y, 1, 1); } }
+function blitUnit(g, type, seat, cx, cy, flip, t, str) {
+  const pal = unitPal(seat), sp = sprite(type, pal);
+  const figs = type === 'inf' ? [[-5, 1], [0, -1], [5, 1]] : type === 'eng' ? [[-3, 0], [3, 1]] : type === 'art' ? [[0, 0]] : [[0, 0]];
+  for (const [dx, dy] of figs) { const bob = Math.floor(t * 2 + dx) % 2 === 0 ? 0 : 0; g.save(); g.translate(Math.round(cx + dx), Math.round(cy + dy + bob)); if (flip) g.scale(-1, 1); g.drawImage(sp, -Math.floor(sp.width / 2), -sp.height + 4); g.restore(); }
+  if (type === 'art') { g.fillStyle = pal.c; g.fillRect(Math.round(cx - 7), Math.round(cy - 4), 2, 3); g.fillStyle = '#eab88e'; g.fillRect(Math.round(cx - 7), Math.round(cy - 5), 2, 1); }
+  if (type === 'gen') { g.fillStyle = '#3a2412'; g.fillRect(Math.round(cx + 4), Math.round(cy - 13), 1, 9); g.fillStyle = FLAGC(seat); g.fillRect(Math.round(cx + 5), Math.round(cy - 13), 5, 3); }
+}
+function drawUnit(g, u, at, t) {
+  const [x0, y0] = hexXY(at || u.at); const cx = x0 + HW / 2, cy = y0 + HH / 2 + 3;
+  const towardCentre = hexXY(V.center)[0] < x0;
+  blitUnit(g, u.type, u.seat, cx, cy, towardCentre, t, u.str);
+}
+function drawOrder(g, u, o) {
+  const [ax, ay] = hexXY(u.at), A = [ax + HW / 2, ay + HH / 2];
+  if (o.k === 'move') {
+    let prev = A; const occ = occupancy();
+    for (const k of o.path) { const [x, y] = hexXY(k), B = [x + HW / 2, y + HH / 2]; pline(g, prev[0], prev[1], B[0], B[1], '#17110a', 3); pline(g, prev[0], prev[1], B[0], B[1], occ[k] && occ[k].seat !== V.me ? '#ff6a4a' : '#ffe9a0', 1); prev = B; }
+    g.fillStyle = '#ffe9a0'; g.fillRect(Math.round(prev[0] - 2), Math.round(prev[1] - 2), 4, 4);
+  } else if (o.k === 'support' || o.k === 'bombard' || o.k === 'bridge') {
+    const [x, y] = hexXY(o.hex), B = [x + HW / 2, y + HH / 2]; const col = o.k === 'support' ? FLAGC(o.for) : o.k === 'bombard' ? '#ff8a30' : '#9adcff';
+    for (let i = 0; i < 1; i += 0.08) { const px = A[0] + (B[0] - A[0]) * i, py = A[1] + (B[1] - A[1]) * i - Math.sin(i * Math.PI) * 6; g.fillStyle = '#17110a'; g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); g.fillStyle = col; g.fillRect(Math.round(px), Math.round(py), 1, 1); }
+  } else {
+    const label = { hold: '', raid: '#c84a2a', dig: '#8a6038', fortify: '#8a8a8a', repair: '#5a8ac8' }[o.k]; if (label) { g.fillStyle = '#17110a'; g.fillRect(Math.round(A[0] + 5), Math.round(A[1] - 11), 5, 5); g.fillStyle = label; g.fillRect(Math.round(A[0] + 6), Math.round(A[1] - 10), 3, 3); }
+  }
+}
+function drawWeather(g, t) {
+  const fr = (V.weather && V.weather.fronts) || [];
+  if (!fr.length) return;
+  for (const k in V.hexes) {
+    const w = E.weatherAt(fr, k); if (w === 'clear') continue;
+    const [x0, y0] = hexXY(k), X = Math.round(x0), Y = Math.round(y0);
+    if (w === 'fog') { g.fillStyle = 'rgba(235,235,230,0.33)'; fillHex(g, x0, y0); }
+    else if (w === 'heat') { g.fillStyle = 'rgba(255,170,60,0.13)'; fillHex(g, x0, y0); }
+    else if (w === 'rain') { g.fillStyle = 'rgba(40,60,90,0.16)'; fillHex(g, x0, y0); g.fillStyle = 'rgba(190,215,255,0.75)'; for (let i = 0; i < 5; i++) { const px = (X + ((i * 7 + Math.floor(t * 30)) % HW)), py = Y + ((i * 11 + Math.floor(t * 50)) % HH); if (MASK[py - Y] && MASK[py - Y][px - X]) { g.fillRect(px, py, 1, 2); } } }
+    else if (w === 'snow') { g.fillStyle = 'rgba(255,255,255,0.18)'; fillHex(g, x0, y0); g.fillStyle = '#ffffff'; for (let i = 0; i < 4; i++) { const px = X + ((i * 9 + Math.floor(t * 6)) % HW), py = Y + ((i * 13 + Math.floor(t * 12)) % HH); if (MASK[py - Y] && MASK[py - Y][px - X]) g.fillRect(px, py, 1, 1); } }
+  }
+  if (showForecast) {
+    const f = (V.weather.forecast || [])[forecastIdx] || [];
+    for (const fr2 of f) { const [cx, cy] = [OFF[0] + fr2.x / Math.sqrt(3) * HW, OFF[1] + fr2.y / 1.5 * DY]; const rr = fr2.r / Math.sqrt(3) * HW; g.fillStyle = { rain: '#9ac0ff', fog: '#ffffff', heat: '#ffaa40', snow: '#ffffff' }[fr2.kind]; for (let a = 0; a < 6.28; a += 0.08) g.fillRect(Math.round(cx + Math.cos(a) * rr), Math.round(cy + Math.sin(a) * rr * 1.15), 2, 2); }
+  }
+}
+let showForecast = false, forecastIdx = 0;
+
+/* ---------------- the replay of the last month ---------------- */
+function startReplay() {
+  const evs = V.events || []; if (!evs.length) return;
+  const moves = evs.filter(e => e.k === 'move'), flashes = [];
+  let t = moves.length ? 2.2 : 0.2;
+  for (const e of evs) {
+    if (e.k === 'bombard' && e.dmg) { flashes.push({ t, hex: e.hex, label: '−' + e.dmg, col: '#ffb060', boom: true }); t += 0.35; }
+    if (e.k === 'battle') { flashes.push({ t, hex: e.hex, label: e.result === 'held' ? 'Repulsed!' : e.result === 'destroyed' ? 'Destroyed!' : 'Broken!', col: e.result === 'held' ? '#ffffff' : '#ff6a4a', boom: true }); t += 0.6; }
+    if (e.k === 'capture' && e.hex) { flashes.push({ t, hex: e.hex, label: 'Taken', col: FLAGC(e.seat) }); t += 0.25; }
+    if (e.k === 'recruit' && e.hex) { flashes.push({ t, hex: e.hex, label: 'New ' + E.UNIT[e.type].name.toLowerCase(), col: '#ffe9a0' }); }
+  }
+  const moving = new Set(moves.map(e => e.u));
+  anim = { t0: performance.now() / 1000, moves, flashes, moving, dur: t + 1.2, dead: evs.filter(e => e.k === 'destroyed') };
+  setStatus('Replaying ' + E.dateOf(V, V.turn - 1).label + '…');
+}
+function drawReplay(g, now) {
+  const t = Math.max(0, now - anim.t0);
+  if (t > anim.dur) { anim = null; setStatus(''); return; }
+  for (const id in V.units) if (!anim.moving.has(id)) drawUnit(g, V.units[id], null, now);
+  for (const d of anim.dead) { const lastFlash = 2.2; if (t < lastFlash + 0.8 && !anim.moving.has(d.u)) { g.globalAlpha = clamp01(1 - (t - lastFlash) / 0.8); drawUnit(g, d, d.hex, now); g.globalAlpha = 1; } }
+  for (const m of anim.moves) {
+    if (!m.path || m.path.length < 2) continue;
+    const k = Math.min(1, t / 2), seg = (m.path.length - 1) * k, i = Math.min(m.path.length - 2, Math.floor(seg)), f = seg - i;
+    const [ax, ay] = hexXY(m.path[i]), [bx, by] = hexXY(m.path[Math.min(m.path.length - 1, i + 1)]);
+    const u = V.units[m.u] || { seat: m.seat, type: m.type, at: m.path[m.path.length - 1] };
+    const x = ax + (bx - ax) * f, y = ay + (by - ay) * f;
+    blitUnit(g, u.type, u.seat, x + HW / 2, y + HH / 2 + 3, bx < ax, now);
+  }
+  for (const f of anim.flashes) if (t >= f.t && t < f.t + 0.6 && f.boom) { const [x0, y0] = hexXY(f.hex), cx = x0 + HW / 2, cy = y0 + HH / 2; const r = 3 + (t - f.t) * 14; g.fillStyle = 'rgba(255,220,120,' + (1 - (t - f.t) / 0.6) + ')'; g.fillRect(Math.round(cx - r / 2), Math.round(cy - 1), Math.round(r), 2); g.fillRect(Math.round(cx - 1), Math.round(cy - r / 2), 2, Math.round(r)); g.fillStyle = 'rgba(240,240,232,' + 0.7 * (1 - (t - f.t) / 0.6) + ')'; g.fillRect(Math.round(cx - r / 3), Math.round(cy - r / 3 - 3), Math.round(r / 1.5), Math.round(r / 2)); }
+}
+const clamp01 = v => Math.max(0, Math.min(1, v));
+
+/* ---------------- input ---------------- */
+const ptrs = new Map(); let drag = null, pinch = null;
+function bindInput() {
+  canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false, t: performance.now() }; else { drag = null; const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: view.z }; } });
+  canvas.addEventListener('pointermove', e => {
+    const p = ptrs.get(e.pointerId); if (p) { p.x = e.clientX; p.y = e.clientY; }
+    if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); setZoom(pinch.z * d / pinch.d, true); return; }
+    if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 6) drag.moved = true; if (drag.moved) { view.x = drag.vx - dx / view.z; view.y = drag.vy - dy / view.z; clampView(); } }
+    const r = canvas.getBoundingClientRect(); const [mx, my] = fromScreen(e.clientX - r.left, e.clientY - r.top); hover = pixToHex(mx, my); showHoverInfo();
+  });
+  const up = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (drag && !drag.moved && ptrs.size === 0) { const r = canvas.getBoundingClientRect(); const [mx, my] = fromScreen(e.clientX - r.left, e.clientY - r.top); const k = pixToHex(mx, my); if (k) tapHex(k); } if (ptrs.size === 0) drag = null; };
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); drag = null; pinch = null; });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); setZoom(view.z * (e.deltaY < 0 ? 1.25 : 0.8), false); }, { passive: false });
+  window.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; if (e.key === 'Escape') { cancelMode(); select(null); } if (e.key === '+' || e.key === '=') setZoom(view.z * 1.25); if (e.key === '-') setZoom(view.z * 0.8); });
+}
+function setZoom(z, free) { view.z = Math.max(1, Math.min(6, free ? z : Math.round(z * 2) / 2)); clampView(); }
+function clampView() { view.x = Math.max(0, Math.min(MAPW, view.x)); view.y = Math.max(0, Math.min(MAPH, view.y)); }
+function resize() { const dpr = window.devicePixelRatio || 1; canvas.width = Math.round(canvas.clientWidth * dpr); canvas.height = Math.round(canvas.clientHeight * dpr); }
+
+/* ---------------- orders ---------------- */
+function myUnit(k) { const u = occupancy()[k]; return u && u.seat === V.me ? u : null; }
+function tapHex(k) {
+  if (V.over || V.status === 'over') { select(null); return; }
+  if (anim) { anim = null; setStatus(''); }
+  if (mode) { finishMode(k); return; }
+  const mine = myUnit(k), h = V.hexes[k];
+  if (sel && reachCache && k !== sel.at && reachCache.best[k] !== undefined && !(mine && mine.id !== sel.id)) {
+    const path = E.pathTo(reachCache, sel.at, k); if (path && path.length) { orders.units[sel.id] = { k: 'move', path }; changed(); select(null); return; }
+  }
+  if (mine) { select(mine); return; }
+  if (h.town && h.town.owner === V.me && !occupancy()[k]) { select(null); openRecruit(k); return; }
+  select(null); describeHex(k);
+}
+function select(u) {
+  sel = u; reachCache = null; closeRecruit();
+  if (u) { reachCache = E.reach(V, u, occupancy(), V.weather.fronts); }
+  renderUnitPanel();
+}
+function startMode(m) {
+  if (!sel) return; mode = m; const u = sel; const range = m === 'bombard' || (m === 'support' && u.type === 'art') ? 2 : 1;
+  const targets = Object.keys(V.hexes).filter(k => { const d = hdist(k, u.at); if (d < 1 || d > range) return false; if (m === 'bridge') return V.hexes[k].t === 'water' && !V.hexes[k].bridge; return true; });
+  modeData = { u, targets: new Set(targets) };
+  setStatus(m === 'support' ? 'Tap the hex this unit will support.' : m === 'bombard' ? 'Tap the hex to shell.' : 'Tap the river hex to bridge.');
+}
+function cancelMode() { mode = null; modeData = null; setStatus(''); }
+function finishMode(k) {
+  const m = mode, u = modeData.u; if (!modeData.targets.has(k)) { cancelMode(); return; }
+  cancelMode();
+  if (m === 'support') { chooseSupportFor(u, k); return; }
+  orders.units[u.id] = { k: m, hex: k }; changed(); select(null);
+}
+function chooseSupportFor(u, k) {
+  const box = el('div', { class: 'modal' }, el('h3', {}, 'Support whom?'), el('p', {}, 'Your unit will help any attack into, or defence of, this hex by the army you choose. Promises made on WhatsApp are not binding — choose carefully.'));
+  const row = el('div', { class: 'row wrap' });
+  for (const s of V.seats) if (s.alive) row.append(el('button', { class: 'army', style: `--c:${E.COLORS[s.seat].ui}`, onclick: () => { orders.units[u.id] = { k: 'support', hex: k, for: s.seat }; changed(); closeModal(); select(null); } }, s.seat === V.me ? 'My own army' : (s.name || E.COLORS[s.seat].name)));
+  box.append(row, el('button', { class: 'ghost', onclick: closeModal }, 'Cancel'));
+  showModal(box);
+}
+function setOrder(k) { if (!sel) return; if (k === 'clear') delete orders.units[sel.id]; else orders.units[sel.id] = { k }; changed(); select(null); }
+function changed() { dirty = true; saveDraft(); renderSide(); }
+let dirty = false;
+function saveDraft() { try { localStorage.setItem('tlc-draft-' + (V.id || 'local') + '-' + V.me + '-' + V.turn, JSON.stringify(orders)); } catch (e) { } }
+function loadDraft() { try { const d = localStorage.getItem('tlc-draft-' + (V.id || 'local') + '-' + V.me + '-' + V.turn); if (d) return JSON.parse(d); } catch (e) { } return null; }
+
+/* ---------------- panels ---------------- */
+function setStatus(t) { $('#status').textContent = t || ''; $('#status').style.display = t ? 'block' : 'none'; }
+function renderUnitPanel() {
+  const p = $('#unitpanel'); p.innerHTML = '';
+  if (!sel) { p.style.display = 'none'; return; }
+  p.style.display = 'block';
+  const u = sel, T = E.UNIT[u.type], h = V.hexes[u.at], o = orders.units[u.id];
+  const terr = h.town ? E.KIND[h.town.kind].name : h.t === 'water' ? (h.bridge ? 'Bridge' : 'Ford') : E.TER[h.t].name;
+  const w = E.weatherAt(V.weather.fronts, u.at);
+  p.append(el('div', { class: 'uhead' }, el('b', {}, T.name), ` · strength ${u.str}/10 · ${terr}${h.ent ? ` · dug in ${h.ent}` : ''} · ${E.WEATHER[w].name}`),
+    el('div', { class: 'small' }, `Moves ${T.mp} · attack ${T.atk} · defence ${T.def}${T.bombard ? ` · shells ${T.bombard} at 2 hexes` : ''}${u.str < 4 ? ' · shaken' : ''}`),
+    el('div', { class: 'small hint' }, 'Tap a lit hex to march there; a red hex is an attack.'));
+  const row = el('div', { class: 'row wrap' });
+  const b = (label, fn, on) => row.append(el('button', { class: on ? 'on' : '', onclick: fn }, label));
+  b('Hold', () => setOrder('hold'), o && o.k === 'hold');
+  b('Support…', () => startMode('support'), o && o.k === 'support');
+  if (u.type === 'art') b('Bombard…', () => startMode('bombard'), o && o.k === 'bombard');
+  if (u.type === 'cav') b('Raid', () => setOrder('raid'), o && o.k === 'raid');
+  if (u.type === 'eng') { b('Dig in', () => setOrder('dig'), o && o.k === 'dig'); if (h.town && h.town.owner === V.me) b('Fortify (2 supply)', () => setOrder('fortify'), o && o.k === 'fortify'); b('Bridge… (3)', () => startMode('bridge'), o && o.k === 'bridge'); if (h.railBroken || nbrs(u.at).some(x => V.hexes[x] && V.hexes[x].railBroken)) b('Repair rail', () => setOrder('repair'), o && o.k === 'repair'); }
+  if (o) b('Clear order', () => setOrder('clear'));
+  b('Close', () => select(null));
+  p.append(row);
+}
+function openRecruit(k) {
+  const p = $('#recruit'), h = V.hexes[k], me = V.seats[V.me]; p.innerHTML = ''; p.style.display = 'block';
+  const queued = orders.recruit.find(r => r.hex === k);
+  const spent = orders.recruit.reduce((t, r) => ({ men: t.men + E.UNIT[r.type].men, sup: t.sup + E.UNIT[r.type].sup }), { men: 0, sup: 0 });
+  const units = Object.values(V.units).filter(u => u.seat === V.me && u.type !== 'gen').length + orders.recruit.filter(r => r.type !== 'gen').length;
+  const cap = capOf(); const hasGen = Object.values(V.units).some(u => u.seat === V.me && u.type === 'gen') || orders.recruit.some(r => r.type === 'gen');
+  p.append(el('div', { class: 'uhead' }, el('b', {}, h.town.name), ` · ${E.KIND[h.town.kind].name} · raise a new unit`), el('div', { class: 'small' }, `You have ${me.men - spent.men} recruits and ${me.sup - spent.sup} supply after other orders · army ${units}/${cap}`));
+  const row = el('div', { class: 'row wrap' });
+  for (const t of ['inf', 'cav', 'art', 'eng', 'gen']) {
+    const T = E.UNIT[t], townOnly = h.town.kind === 'town' && (t === 'art' || t === 'eng' || t === 'gen'), genBad = t === 'gen' && (hasGen || h.town.kind !== 'hq');
+    const afford = me.men - spent.men + (queued ? E.UNIT[queued.type].men : 0) >= T.men && me.sup - spent.sup + (queued ? E.UNIT[queued.type].sup : 0) >= T.sup;
+    const ok = !townOnly && !genBad && afford && (t === 'gen' || units - (queued && queued.type !== 'gen' ? 1 : 0) < cap);
+    row.append(el('button', { class: queued && queued.type === t ? 'on' : '', disabled: ok ? null : 'disabled', onclick: () => { orders.recruit = orders.recruit.filter(r => r.hex !== k); orders.recruit.push({ hex: k, type: t }); changed(); closeRecruit(); } }, `${T.name} (${T.men} men, ${T.sup} supply)`));
+  }
+  if (queued) row.append(el('button', { onclick: () => { orders.recruit = orders.recruit.filter(r => r.hex !== k); changed(); closeRecruit(); } }, 'Cancel recruit'));
+  row.append(el('button', { onclick: closeRecruit }, 'Close'));
+  if (h.town.kind === 'town') p.append(el('div', { class: 'small hint' }, 'Small towns raise infantry and cavalry. Guns and engineers come from headquarters and the Capital.'));
+  p.append(row);
+}
+function closeRecruit() { const p = $('#recruit'); if (p) { p.style.display = 'none'; p.innerHTML = ''; } }
+function capOf() { let c = 4; for (const k in V.hexes) { const t = V.hexes[k].town; if (t && t.owner === V.me) c += E.KIND[t.kind].cap; } return c; }
+function describeHex(k) {
+  const h = V.hexes[k], w = E.weatherAt(V.weather.fronts, k), u = occupancy()[k];
+  const bits = [h.town ? `${h.town.name} (${E.KIND[h.town.kind].name}, ${h.town.owner === E.NEUTRAL ? 'held by militia' : 'held by ' + seatName(h.town.owner)}${h.town.fort ? ', fort ' + h.town.fort : ''})` : h.t === 'water' ? (h.bridge ? 'Bridge' : h.ford ? 'Ford (impassable in rain)' : 'River') : E.TER[h.t].name];
+  if (h.farm) bits.push(h.farm.burned > 0 ? 'burned farm' : 'farm'); if (h.rail) bits.push(h.railBroken ? 'broken railway' : 'railway'); if (h.road) bits.push('road'); if (h.ent) bits.push('earthworks ' + h.ent);
+  bits.push(E.WEATHER[w].name.toLowerCase());
+  if (u) bits.push(`${seatName(u.seat)} ${E.UNIT[u.type].name.toLowerCase()} (${u.str})`);
+  setStatus(bits.join(' · ')); clearTimeout(toastT); toastT = setTimeout(() => setStatus(''), 4000);
+}
+function showHoverInfo() { }
+function seatName(s) { if (s === E.NEUTRAL) return 'Militia'; const x = V.seats[s]; return x.name || E.COLORS[s].name; }
+
+function renderTop() {
+  const me = V.seats[V.me], d = E.dateOf(V, V.turn), era = E.eraOf(V, V.me);
+  const spent = orders.recruit.reduce((t, r) => ({ men: t.men + E.UNIT[r.type].men, sup: t.sup + E.UNIT[r.type].sup }), { men: 0, sup: 0 });
+  const myUnits = Object.values(V.units).filter(u => u.seat === V.me && u.type !== 'gen').length;
+  const w = E.weatherAt(V.weather.fronts, me.hq);
+  $('#top').innerHTML = '';
+  $('#top').append(
+    el('div', { class: 'title' }, el('b', {}, V.name), el('span', { class: 'date' }, `${d.label} · turn ${V.turn}/${V.turnLimit} · ${E.ERAS[era].year === d.year ? '' : ''}${E.ERAS[Math.min(3, Math.floor((V.turn - 1) / V.eraTurns))].name}`)),
+    el('div', { class: 'res' }, el('span', { title: 'Recruits' }, `👥 ${me.men - spent.men}`), el('span', { title: 'Supply' }, `📦 ${me.sup - spent.sup}`), el('span', { title: 'Army size / limit' }, `⚔ ${myUnits}/${capOf()}`), el('span', { title: 'Victory points' }, `★ ${me.score}`)),
+    el('div', { class: 'wx' }, wxChip('Now', w), ...(V.weather.forecast || []).map((f, i) => wxChip(E.dateOf(V, V.turn + 1 + i).label.split(' ')[0].slice(0, 3), dominantAround(f, me.hq), i))),
+    el('div', { class: 'clock', id: 'clock' }, ''),
+    el('div', { class: 'players' }, ...V.seats.map(s => el('span', { class: 'pdot' + (s.alive ? '' : ' out'), style: `--c:${E.COLORS[s.seat].ui}`, title: `${s.name || E.COLORS[s.seat].name}${s.bot ? ' (computer)' : ''} · ${s.towns} towns · ${s.score} VP${(V.submittedSeats || [])[s.seat] ? ' · orders in' : ''}` }, (V.submittedSeats || [])[s.seat] || s.bot ? '✓' : '·')))
+  );
+  tickClock();
+}
+function dominantAround(fronts, k) { const counts = {}; for (const x of Object.keys(V.hexes).filter(x => hdist(x, k) <= 4)) { const w = E.weatherAt(fronts, x); counts[w] = (counts[w] || 0) + 1; } return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]; }
+function wxChip(label, w, fi) { const icon = { clear: '☀', rain: '🌧', fog: '🌫', heat: '🔥', snow: '❄' }[w]; return el('button', { class: 'wxchip' + (fi !== undefined && showForecast && forecastIdx === fi ? ' on' : ''), title: `${label}: ${E.WEATHER[w].name}. ${E.WEATHER[w].desc}${fi !== undefined ? (fi === 0 ? ' (forecast, usually right)' : ' (forecast, often wrong)') : ''}`, onclick: () => { if (fi === undefined) { showForecast = false; } else { if (showForecast && forecastIdx === fi) showForecast = false; else { showForecast = true; forecastIdx = fi; } } renderTop(); } }, el('small', {}, label), ' ', icon); }
+function tickClock() {
+  const c = $('#clock'); if (!c) return;
+  if (V.status === 'over' || V.over) { c.textContent = 'The war is over'; return; }
+  if (!V.deadline) { c.textContent = 'Solo campaign'; return; }
+  const ms = V.deadline - Date.now(); if (ms <= 0) { c.textContent = 'Turn resolving…'; return; }
+  const h = Math.floor(ms / 3600e3), m = Math.floor(ms / 60e3) % 60; c.textContent = `Orders due in ${h ? h + 'h ' : ''}${m}m`;
+}
+let tab = 'orders';
+function renderSide() {
+  renderTop();
+  const s = $('#side'); s.innerHTML = '';
+  const tabs = el('div', { class: 'tabs' }, ...[['orders', 'Orders'], ['armies', 'Armies'], ['aims', 'War aims'], ['news', 'Dispatches'], ['help', 'Rules']].map(([k, t]) => el('button', { class: tab === k ? 'on' : '', onclick: () => { tab = k; renderSide(); } }, t)));
+  s.append(tabs);
+  const body = el('div', { class: 'tabbody' }); s.append(body);
+  const me = V.seats[V.me];
+  if (V.over) body.append(renderOver());
+  if (tab === 'orders') {
+    const mine = Object.values(V.units).filter(u => u.seat === V.me);
+    const n = Object.keys(orders.units).filter(id => V.units[id]).length;
+    body.append(el('p', { class: 'small' }, `${n} of ${mine.length} units have orders; the rest hold their ground (infantry holding in the open dig a shallow trench). ${orders.recruit.length ? orders.recruit.length + ' new unit' + (orders.recruit.length > 1 ? 's' : '') + ' ordered.' : 'Tap one of your towns to raise troops.'}`));
+    const list = el('div', { class: 'olist' });
+    for (const u of mine.sort((a, b) => a.type.localeCompare(b.type))) { const o = orders.units[u.id]; list.append(el('div', { class: 'oline', onclick: () => { select(u); centerOn(u.at); } }, el('span', { class: 'sw', style: `--c:${E.COLORS[V.me].ui}` }), `${E.UNIT[u.type].name} (${u.str}) ${V.hexes[u.at].town ? 'at ' : ''}${hexLabel(u.at)}: `, el('i', {}, describeOrder(o)))); }
+    body.append(list);
+    if (!V.over) body.append(el('div', { class: 'submit' },
+      el('button', { class: 'primary', onclick: submit }, V.deadline ? (V.myOrders && !dirty ? 'Orders sent ✓ — send again' : 'Send my orders') : 'Fight the month'),
+      el('div', { class: 'small' }, V.deadline ? 'You can change your orders until the turn resolves. It resolves at the deadline, or as soon as every general has sent orders.' : 'The computer generals move at the same time as you.')));
+  }
+  if (tab === 'armies') {
+    body.append(el('p', { class: 'small' }, 'Deals are made on WhatsApp. Here you decide what you actually do. Changes take effect when the turn resolves.'));
+    const d = orders.diplo || (orders.diplo = { sight: V.rel.sight[V.me].slice(), passage: V.rel.passage[V.me].slice(), gift: [] });
+    for (const o of V.seats) {
+      if (o.seat === V.me) continue;
+      const theyShare = V.rel.sight[o.seat][V.me], theyPass = V.rel.passage[o.seat][V.me];
+      const box = el('div', { class: 'army-card', style: `--c:${E.COLORS[o.seat].ui}` },
+        el('div', { class: 'ah' }, el('b', {}, o.name || E.COLORS[o.seat].name), o.bot ? ' (computer)' : '', o.alive ? ` · ${o.towns} towns · ${o.score} VP` : ' · out of the war'),
+        el('div', { class: 'small' }, `They ${theyShare ? 'share' : 'do not share'} their scouts' reports with you and ${theyPass ? 'grant' : 'do not grant'} you free passage.`));
+      if (o.alive) {
+        box.append(el('label', { class: 'chk' }, el('input', { type: 'checkbox', ...(d.sight[o.seat] ? { checked: 'checked' } : {}), onchange: e => { d.sight[o.seat] = e.target.checked; changed(); } }), ' Share what my scouts see'),
+          el('label', { class: 'chk' }, el('input', { type: 'checkbox', ...(d.passage[o.seat] ? { checked: 'checked' } : {}), onchange: e => { d.passage[o.seat] = e.target.checked; changed(); } }), ' Grant free passage (their troops ignore mine when marching)'));
+        const g = d.gift.find(x => x.to === o.seat) || { to: o.seat, men: 0, sup: 0 };
+        const inp = (f, max) => el('input', { type: 'number', min: 0, max, value: g[f] || 0, oninput: e => { g[f] = Math.max(0, Math.min(max, e.target.value | 0)); d.gift = d.gift.filter(x => x.to !== o.seat); if (g.men || g.sup) d.gift.push(g); changed(); } });
+        box.append(el('div', { class: 'gift' }, 'Send ', inp('men', me.men), ' recruits and ', inp('sup', me.sup), ' supply'));
+      }
+      body.append(box);
+    }
+  }
+  if (tab === 'aims') {
+    const modeText = { points: 'Victory points: towns 1, headquarters 2, the Capital 4. Holding more than half of all towns ends the war at once.', capital: 'Take the Capital: whoever holds it for four months in a row wins. Otherwise victory points decide.', conquest: 'Last army standing. Otherwise victory points decide.' }[V.mode];
+    body.append(el('h4', {}, 'How the war is won'), el('p', { class: 'small' }, `${modeText} The war ends after turn ${V.turnLimit} (${E.dateOf(V, V.turnLimit).label}).`));
+    if (me.goal) body.append(el('h4', {}, 'Your secret orders'), el('div', { class: 'secret' }, me.goal.text, el('div', { class: 'small' }, `Worth ${me.goal.vp} victory points at the end. Nobody else knows this.`)));
+    body.append(el('h4', {}, 'Standings'), el('div', { class: 'olist' }, ...V.seats.slice().sort((a, b) => b.score - a.score).map(s => el('div', { class: 'oline' }, el('span', { class: 'sw', style: `--c:${E.COLORS[s.seat].ui}` }), `${s.name || E.COLORS[s.seat].name}: ${s.score} VP, ${s.towns} towns${s.alive ? '' : ' (out)'}`))));
+    if (V.capitalHold && V.capitalHold.seat !== null) body.append(el('p', { class: 'small' }, `${seatName(V.capitalHold.seat)} has held the Capital for ${V.capitalHold.count} month${V.capitalHold.count === 1 ? '' : 's'}.`));
+    const nextEra = Math.min(3, Math.floor((V.turn - 1) / V.eraTurns) + 1); if (nextEra > Math.floor((V.turn - 1) / V.eraTurns)) body.append(el('p', { class: 'small' }, `Coming in ${E.ERAS[nextEra].year} (turn ${nextEra * V.eraTurns + 1}): ${E.ERAS[nextEra].name}. ${E.ERAS[nextEra].text} Whoever holds the Capital's foundry gets each improvement early.`));
+  }
+  if (tab === 'news') {
+    body.append(el('button', { onclick: startReplay, disabled: (V.events || []).length ? null : 'disabled' }, '▶ Replay last month'));
+    const byTurn = {}; for (const l of V.log || []) (byTurn[l.turn] = byTurn[l.turn] || []).push(l.text);
+    for (const t of Object.keys(byTurn).sort((a, b) => b - a).slice(0, 8)) body.append(el('h4', {}, +t === 0 ? 'The outbreak' : E.dateOf(V, +t).label), el('ul', { class: 'news' }, ...byTurn[t].map(x => el('li', {}, x))));
+  }
+  if (tab === 'help') body.append(el('div', { class: 'small rules', html: RULES }));
+}
+const RULES = `
+<p><b>Every month</b> all generals give orders in secret. When the turn resolves, everything happens at once: marches, then shelling, then battles.</p>
+<p><b>Marching.</b> Tap a unit, then a lit hex. Roads and railways are fast, woods and hills slow, rivers only cross at bridges and fords. Coming next to an enemy stops a march.</p>
+<p><b>Attacking.</b> March into a red hex. Attack and defence add up: <i>woods ×1.3, hills ×1.35, towns ×1.4, headquarters and the Capital ×1.6</i>, plus forts and earthworks. A big enough win drives the defenders back; a surrounded unit is badly hurt.</p>
+<p><b>Support.</b> A unit next to a hex (artillery up to two away) can support <i>any army's</i> attack into it, or defence of it. If the supporting unit is attacked itself, its support is cut. This is how alliances fight together — and how they betray each other.</p>
+<p><b>Recruits and supply.</b> Towns give recruits and supply; farms and railways add supply. Every unit eats supply each month. Units more than four hexes from your towns, and off your railways, are out of supply and lose men — twice as fast in snow. Units in supply that did not fight regain strength each month (1 supply in a town, 2 in the field). Your army can be no larger than your towns allow: 4, plus 1 per town, 4 for headquarters and 3 for the Capital.</p>
+<p><b>Weather</b> drifts across the map in fronts. Rain makes mud, floods fords and keeps guns to the roads. Fog blinds scouts and artillery. Heat wears out long marches. The forecast for next month is usually right; the one after is often wrong.</p>
+<p><b>Diplomacy.</b> Share your scouts' reports, grant free passage, or send recruits and supply to another army. Any of it can be withdrawn next month.</p>
+<p><b>Cavalry</b> raid railways and farms. <b>Engineers</b> dig earthworks, fortify towns, bridge rivers and mend railways. A <b>general</b> makes the units around him fight 15% better.</p>`;
+function describeOrder(o) { if (!o) return 'hold'; if (o.k === 'move') { const last = o.path[o.path.length - 1], occ = occupancy()[last], where = hexLabel(last), town = !!V.hexes[last].town; return occ && occ.seat !== V.me ? `attack ${town ? '' : 'the enemy '}${where}` : town ? `march to ${where}` : `march ${where}`; } if (o.k === 'support') return `support ${o.for === V.me ? 'my army' : seatName(o.for)} ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bombard') return `shell the enemy ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bridge') return 'build a bridge'; return { hold: 'hold', raid: 'raid', dig: 'dig earthworks', fortify: 'fortify the town', repair: 'repair the railway' }[o.k] || o.k; }
+function hexLabel(k) { const h = V.hexes[k]; if (h.town) return h.town.name; let best = null, bd = 99; for (const x in V.hexes) if (V.hexes[x].town) { const d = hdist(x, k); if (d < bd) { bd = d; best = x; } } return `near ${V.hexes[best].town.name}`; }
+function centerOn(k) { const [x, y] = hexXY(k); view.x = x + HW / 2; view.y = y + HH / 2; }
+function renderOver() {
+  const o = V.over, w = V.seats[o.winner];
+  return el('div', { class: 'over' }, el('h3', {}, o.winner === V.me ? 'Victory!' : `${w.name || E.COLORS[o.winner].name} wins the war`), el('p', {}, o.why), el('h4', {}, 'Final reckoning and secret orders'),
+    el('div', { class: 'olist' }, ...o.scores.slice().sort((a, b) => b.vp - a.vp).map(s => { const g = o.goals.find(x => x.seat === s.seat); return el('div', { class: 'oline' }, el('span', { class: 'sw', style: `--c:${E.COLORS[s.seat].ui}` }), `${V.seats[s.seat].name || E.COLORS[s.seat].name}: ${s.vp} VP. Secret orders: “${g.goal.text}” ${g.met ? '— achieved' : '— failed'}`); })));
+}
+function showModal(box) { closeModal(); const m = el('div', { class: 'modalwrap', id: 'modal', onclick: e => { if (e.target.id === 'modal') closeModal(); } }, box); document.body.append(m); }
+function closeModal() { const m = $('#modal'); if (m) m.remove(); }
+
+/* ---------------- talking to the server (or the local war) ---------------- */
+async function submit() {
+  try {
+    setStatus('Sending orders…');
+    const prevTurn = V.turn;
+    const nv = await api.submit(orders, V.turn);
+    dirty = false;
+    applyView(nv);
+    if (nv.turn !== prevTurn) { orders = { units: {}, recruit: [], diplo: null }; startReplay(); } else setStatus('Orders received. You can change them until the turn resolves.');
+    setTimeout(() => { if (!anim) setStatus(''); }, 3500);
+  } catch (e) { setStatus(e.message); }
+}
+function applyView(nv) {
+  const newTurn = !V || V.turn !== nv.turn;
+  V = nv;
+  if (newTurn || !baseCanvas) { buildBase(); if (!applyView.centered) { centerOn(V.seats[V.me].hq); applyView.centered = true; } }
+  if (newTurn) { const draft = loadDraft(); orders = draft || (V.myOrders ? JSON.parse(JSON.stringify(V.myOrders)) : { units: {}, recruit: [], diplo: null }); if (orders.diplo === undefined) orders.diplo = null; }
+  // drop orders for units that no longer exist
+  for (const id in orders.units) if (!V.units[id]) delete orders.units[id];
+  sel = null; reachCache = null;
+  renderSide(); renderUnitPanel();
+}
+async function poll() {
+  if (!api.status) return;
+  try { const s = await api.status(); if (s.turn !== V.turn) { const nv = await api.load(); applyView(nv); startReplay(); } else if (JSON.stringify(s.submitted) !== JSON.stringify(V.submittedSeats)) { V.submittedSeats = s.submitted; renderTop(); } } catch (e) { }
+}
+async function boot(backend) {
+  api = backend;
+  canvas = $('#map'); ctx = canvas.getContext('2d');
+  resize(); window.addEventListener('resize', resize); bindInput();
+  let v;
+  try { v = await api.load(); } catch (e) { document.body.innerHTML = `<div class="fatal"><h2>That campaign could not be found</h2><p>${esc(e.message)}</p></div>`; return; }
+  if (!v.seats[v.me].joined) { await joinDialog(v); v = await api.load(); }
+  applyView(v);
+  view.z = Math.max(2, Math.min(4, Math.floor(Math.min(canvas.clientWidth / MAPW, canvas.clientHeight / MAPH) * 2) / 2 * 1.6));
+  const seen = (() => { try { return +localStorage.getItem('tlc-seen-' + (v.id || 'local') + '-' + v.me) || 0; } catch (e) { return 0; } })();
+  if (seen && seen < v.turn) startReplay();
+  try { localStorage.setItem('tlc-seen-' + (v.id || 'local') + '-' + v.me, v.turn); } catch (e) { }
+  requestAnimationFrame(draw);
+  setInterval(tickClock, 15000);
+  if (api.status) setInterval(poll, 45000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+}
+function joinDialog(v) {
+  return new Promise(res => {
+    const name = el('input', { placeholder: 'Your army\'s name, e.g. Army of the Shenandoah', maxlength: 32 }), email = el('input', { placeholder: 'Email for turn reports (optional)', type: 'email', maxlength: 120 });
+    const box = el('div', { class: 'modal' }, el('h3', {}, `You command the ${E.COLORS[v.me].name} army`), el('p', {}, `${v.name}: ${v.n} armies, ${v.turnLimit} months of war.`), name, email,
+      el('button', { class: 'primary', onclick: async () => { await api.join(name.value, email.value); closeModal(); res(); } }, 'Take command'));
+    showModal(box);
+  });
+}
+window.TLC = { boot, Engine: E };
+window.TLC_zoom = f => setZoom(view.z * f);
+window.TLC_debug = { screenOf: k => { const [x, y] = hexXY(k); const r = canvas.getBoundingClientRect(); const [sx, sy] = toScreen(x + HW / 2, y + HH / 2); return [sx + r.left, sy + r.top]; }, centerOn: k => centerOn(k), get V() { return V; }, get orders() { return orders; } };
+})();
+/* The Long Campaign — solo war in the browser against computer generals.
+   Designed and built by Claude (Anthropic) with Dave. */
+(function () {
+  const E = window.Engine, KEY = 'tlc-solo-v1';
+  let state = null;
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { } };
+  const load = () => { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } };
+  const view = () => { const v = E.view(state, 0); v.deadline = null; v.status = state.over ? 'over' : 'active'; v.submittedSeats = state.seats.map(s => s.bot); return v; };
+  function setup(onDone) {
+    const prev = load();
+    const pick = { seats: 4, mapSize: 'normal', terrain: 'normal', mode: 'points', turnLimit: 30 };
+    const wrap = document.createElement('div'); wrap.className = 'modalwrap'; wrap.id = 'modal';
+    const box = document.createElement('div'); box.className = 'modal'; wrap.append(box);
+    const seg = (label, k, opts) => { const row = document.createElement('div'); row.className = 'field'; row.innerHTML = `<span>${label}</span>`; const s = document.createElement('div'); s.className = 'seg'; const draw = () => { s.innerHTML = ''; for (const [v, t] of opts) { const b = document.createElement('button'); b.textContent = t; if (pick[k] === v) b.className = 'on'; b.onclick = () => { pick[k] = v; draw(); }; s.append(b); } }; draw(); row.append(s); return row; };
+    box.innerHTML = `<h3>The Long Campaign</h3><p>A Civil War campaign against computer generals. Every month you give secret orders; then everyone moves at once.</p>`;
+    const name = document.createElement('input'); name.placeholder = 'Name your army, e.g. Army of the Potomac'; name.maxLength = 32;
+    box.append(name, seg('Armies', 'seats', [[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']]), seg('Map', 'mapSize', [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']]), seg('Woods & hills', 'terrain', [['light', 'Light'], ['normal', 'Normal'], ['heavy', 'Heavy']]), seg('Victory', 'mode', [['points', 'Points'], ['capital', 'Capital'], ['conquest', 'Conquest']]), seg('Length', 'turnLimit', [[20, '20 months'], [30, '30'], [40, '40']]));
+    const go = document.createElement('button'); go.className = 'primary'; go.textContent = 'Declare war';
+    go.onclick = () => { state = E.newGame({ seats: pick.seats, humans: 1, mapSize: pick.mapSize, terrain: pick.terrain, mode: pick.mode, turnLimit: pick.turnLimit, name: 'The Long Campaign' }); state.seats[0].name = name.value.trim() || 'Army of the Potomac'; state.seats[0].joined = true; save(); wrap.remove(); onDone(); };
+    box.append(go);
+    if (prev && !prev.over) { const cont = document.createElement('button'); cont.className = 'ghost'; cont.style.marginTop = '8px'; cont.style.width = '100%'; cont.textContent = `Continue the war (${E.dateOf(prev, prev.turn).label})`; cont.onclick = () => { state = prev; wrap.remove(); onDone(); }; box.append(cont); }
+    box.append(Object.assign(document.createElement('p'), { className: 'small', textContent: 'Designed and built by Claude (Anthropic) with Dave. The online version lets two to six friends play together, a turn or two a day.' }));
+    document.body.append(wrap);
+  }
+  window.TLC_solo = function () {
+    setup(() => {
+      TLC.boot({
+        load: async () => view(),
+        join: async () => { },
+        submit: async (orders) => { const o = { 0: E.cleanOrders(state, 0, orders) }; E.resolve(state, o); save(); return view(); }
+      });
+      const b = document.createElement('button'); b.textContent = 'New war'; b.style.cssText = 'position:absolute;left:10px;top:30px;z-index:2;padding:4px 9px;font-size:13px'; b.onclick = () => { if (confirm('Abandon this war and start a new one?')) { try { localStorage.removeItem(KEY); } catch (e) { } location.reload(); } };
+      document.getElementById('mapwrap').append(b);
+    });
+  };
+})();
+TLC_solo();</script></body></html>
