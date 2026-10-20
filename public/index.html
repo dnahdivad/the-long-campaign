@@ -62,13 +62,14 @@ const copy = (t, b) => { navigator.clipboard && navigator.clipboard.writeText(t)
 function showLinks(j, title) {
   const out = document.getElementById('out'); out.innerHTML = '';
   const base = location.origin;
-  if (j.adminUrl && !/^https?:/.test(j.adminUrl)) j.adminUrl = base + j.adminUrl;
+  const here = u => u ? base + u.replace(/^https?:\/\/[^/]+/, '') : u; // links always point at the address you are on
+  if (j.adminUrl) j.adminUrl = here(j.adminUrl);
   const h = document.createElement('div'); h.innerHTML = `<h2 style="margin-top:16px">${title}</h2><p class="small">Send each player their own link: it is their key to their army, so keep it private. Your organiser's page (bookmark it): <a href="${j.adminUrl || location.href}">${(j.adminUrl || location.href).replace(/^https?:\/\//, '')}</a></p>`;
   out.append(h);
   const box = document.createElement('div'); box.className = 'links';
   const colors = { Blue: '#3a5cc0', Grey: '#7d7e78', Crimson: '#c0392b', Green: '#3e8a34', Butternut: '#c8962a', Purple: '#7c46a8' };
   for (const l of j.links) {
-    const url = !l.url ? '' : l.url.startsWith('http') ? l.url : base + l.url;
+    const url = here(l.url) || '';
     const row = document.createElement('div'); row.className = 'link'; row.style.setProperty('--c', colors[l.color] || '#888');
     row.innerHTML = `<b>${l.color}${l.bot ? ' (computer)' : ''}</b>${l.bot ? '<span class="small">Played by the computer</span><span></span>' : `<code>${url}</code>`}`;
     if (!l.bot) { const b = document.createElement('button'); b.textContent = 'Copy'; b.onclick = () => copy(url, b); row.append(b); }
