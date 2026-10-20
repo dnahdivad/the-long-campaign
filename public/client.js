@@ -112,9 +112,13 @@ function drawTown(g, h, cx, cy) {
 /* ---------------- drawing each frame ---------------- */
 let sel = null, reachCache = null, mode = null, modeData = null, orders = { units: {}, recruit: [], diplo: null }, hover = null, anim = null, lastFrame = 0, toastT = 0;
 function occupancy() { return E.occupancy({ units: V.units }); }
+let drawFailed = 0;
 function draw(now) {
   requestAnimationFrame(draw);
   if (!V || !baseCanvas) return;
+  try { drawFrame(now); } catch (e) { if (drawFailed++ < 3) console.error('map frame failed', e); }
+}
+function drawFrame(now) {
   const dt = Math.min(0.05, (now - lastFrame) / 1000 || 0); lastFrame = now;
   const g = dyn; g.clearRect(0, 0, MAPW, MAPH); g.imageSmoothingEnabled = false;
   g.drawImage(baseCanvas, 0, 0);
@@ -304,8 +308,15 @@ function chooseSupportFor(u, k) {
 function setOrder(k) { if (!sel) return; if (k === 'clear') delete orders.units[sel.id]; else orders.units[sel.id] = { k }; changed(); select(null); }
 function changed() { dirty = true; saveDraft(); renderSide(); }
 let dirty = false;
-function saveDraft() { try { localStorage.setItem('tlc-draft-' + (V.id || 'local') + '-' + V.me + '-' + V.turn, JSON.stringify(orders)); } catch (e) { } }
-function loadDraft() { try { const d = localStorage.getItem('tlc-draft-' + (V.id || 'local') + '-' + V.me + '-' + V.turn); if (d) return JSON.parse(d); } catch (e) { } return null; }
+// unsent orders are kept in the browser, one draft per war (the map seed tells two solo wars apart)
+const draftKey = () => 'tlc-draft-' + (V.id || 'local') + '-' + V.seed + '-' + V.me + '-' + V.turn;
+function saveDraft() { try { localStorage.setItem(draftKey(), JSON.stringify(orders)); } catch (e) { } }
+function loadDraft() { try { const d = localStorage.getItem(draftKey()); if (d) return JSON.parse(d); } catch (e) { } return null; }
+// keep only orders that make sense on this map, for these units, this month
+function sanitize(o) {
+  try { const c = E.cleanOrders(V, V.me, o); return { units: c.units, recruit: c.recruit, diplo: o && o.diplo ? c.diplo : null }; }
+  catch (e) { console.warn('dropping unreadable orders', e); return { units: {}, recruit: [], diplo: null }; }
+}
 
 /* ---------------- panels ---------------- */
 function setStatus(t) { $('#status').textContent = t || ''; $('#status').style.display = t ? 'block' : 'none'; }
@@ -540,7 +551,7 @@ function applyView(nv) {
   const newTurn = !V || V.turn !== nv.turn;
   V = nv;
   if (newTurn || !baseCanvas) { buildBase(); if (!applyView.centered) { centerOn(V.seats[V.me].hq); applyView.centered = true; } }
-  if (newTurn) { const draft = loadDraft(); orders = draft || (V.myOrders ? JSON.parse(JSON.stringify(V.myOrders)) : { units: {}, recruit: [], diplo: null }); if (orders.diplo === undefined) orders.diplo = null; }
+  if (newTurn) { const draft = loadDraft(); orders = draft || V.myOrders ? sanitize(draft || JSON.parse(JSON.stringify(V.myOrders))) : { units: {}, recruit: [], diplo: null }; }
   // drop orders for units that no longer exist
   for (const id in orders.units) if (!V.units[id]) delete orders.units[id];
   sel = null; reachCache = null;
