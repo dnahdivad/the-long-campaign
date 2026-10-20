@@ -330,7 +330,7 @@ E.view = function (state, seat) {
   return {
     v: state.v, id: state.id, name: state.name, R: state.R, n: state.n, seed: state.seed, turn: state.turn, mode: state.mode, turnLimit: state.turnLimit, eraTurns: state.eraTurns, startMonth: state.startMonth, startYear: state.startYear,
     center: state.center, hexes: state.hexes, units, seats, me: seat, rel: state.rel, visible: [...vis], weather: { fronts: state.weather.fronts, forecast: state.weather.forecast }, capitalHold: state.capitalHold,
-    events: ev.map(e => { const c = { ...e }; delete c.vis; return c; }), log: state.log.slice(-60), over: state.over, deadline: state.deadline, myOrders: state.orders && state.orders[seat] || null
+    events: ev.map(e => { const c = { ...e }; delete c.vis; return c; }), log: state.log.filter(l => !l.vis || l.vis.includes(seat) || state.over).slice(-60).map(l => ({ turn: l.turn, text: l.text })), over: state.over, deadline: state.deadline, myOrders: state.orders && state.orders[seat] || null
   };
 };
 
@@ -358,38 +358,50 @@ E.goalMet = function (state, seat) {
   return false;
 };
 E.unitCap = (state, seat) => { let c = 4; for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === seat) c += KIND[t.kind].cap; } return c; };
-E.inSupply = function (state, u) {
-  if (u.seat === NEUTRAL) return true;
-  for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === u.seat && hdist(k, u.at) <= 4) return true; }
+// a month's income from towns, farms and rail, and the upkeep of the army as it stands
+E.incomeOf = function (state, seat) {
+  const H = state.hexes; let men = 0, sup = 0;
+  for (const k in H) { const h = H[k]; if (h.town && h.town.owner === seat) { men += KIND[h.town.kind].men; sup += KIND[h.town.kind].sup; } if (h.farm && h.farm.burned <= 0 && H[h.farm.town] && H[h.farm.town].town.owner === seat) sup += 1; }
+  const hq = state.seats[seat].hq;
+  if (H[hq].town.owner === seat) { const seen = new Set([hq]), q = [hq]; while (q.length) { const c = q.shift(); for (const nb of nbrs(c)) { const x = H[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); if (x.town && x.town.owner === seat) sup += 1; } } } }
+  const up = Object.values(state.units).filter(u => u.seat === seat).reduce((t, u) => t + UNIT[u.type].up, 0);
+  return { men, sup, up };
+};
+E.inSupply = function (state, u) { return u.seat === NEUTRAL || E.inSupplyAt(state, u.seat, u.at); };
+E.inSupplyAt = function (state, seat, at) {
+  for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === seat && hdist(k, at) <= 4) return true; }
   // railheads: an unbroken line back to an owned town
-  const h = state.hexes[u.at]; if (!h.rail || h.railBroken) return false;
-  const seen = new Set([u.at]), q = [u.at];
-  while (q.length) { const c = q.shift(); const t = state.hexes[c].town; if (t && t.owner === u.seat) return true; for (const nb of nbrs(c)) { const x = state.hexes[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); } } }
+  const h = state.hexes[at]; if (!h.rail || h.railBroken) return false;
+  const seen = new Set([at]), q = [at];
+  while (q.length) { const c = q.shift(); const t = state.hexes[c].town; if (t && t.owner === seat) return true; for (const nb of nbrs(c)) { const x = state.hexes[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); } } }
   return false;
 };
 
 /* ---------------- orders ---------------- */
-// orders = { units: {id: {k:'move', path:[...]} | {k:'hold'} | {k:'support', hex, for} | {k:'bombard', hex} | {k:'raid'} | {k:'dig'} | {k:'fortify'} | {k:'bridge', hex} | {k:'repair'} }, recruit: [{hex, type}], diplo: {sight:[], passage:[], gift: [{to, men, sup}]} }
+// orders = { units: {id: {k:'move', path:[...]} | {k:'hold'} | {k:'support', hex, for} | {k:'bombard', hex} | {k:'raid'} | {k:'dig'} | {k:'fortify'} | {k:'bridge', hex} | {k:'repair'} | {k:'merge', into} }, a move may carry detach: n, recruit: [{hex, type}], diplo: {sight:[], passage:[], gift: [{to, men, sup}]} }
 E.cleanOrders = function (state, seat, o) {
   const out = { units: {}, recruit: [], diplo: { sight: state.rel.sight[seat].slice(), passage: state.rel.passage[seat].slice(), gift: [] } };
   if (!o || typeof o !== 'object') return out;
-  const occ = E.occupancy(state);
+  const occ = E.occupancy(state), detaches = [];
   for (const id in (o.units || {})) {
     const u = state.units[id], ord = o.units[id]; if (!u || u.seat !== seat || !ord) continue;
     const k = ord.k;
     if (k === 'move' && Array.isArray(ord.path) && ord.path.length) {
       let cur = u.at, cost = 0; const path = [];
       for (const x of ord.path.slice(0, 12)) { if (typeof x !== 'string' || !state.hexes[x] || hdist(cur, x) !== 1) break; const c = E.stepCost(state, u.type, cur, x, state.weather.fronts); if (!isFinite(c) || cost + c > UNIT[u.type].mp + 1e-9) break; cost += c; path.push(x); cur = x; }
-      if (path.length) out.units[id] = { k: 'move', path };
+      if (path.length) { out.units[id] = { k: 'move', path }; const det = ord.detach | 0; if (det >= 1 && det < u.str && u.type !== 'gen') detaches.push([id, det]); }
     } else if (k === 'support' && state.hexes[ord.hex] && hdist(u.at, ord.hex) <= (u.type === 'art' ? 2 : 1) && hdist(u.at, ord.hex) >= 1 && Number.isInteger(ord.for) && ord.for >= 0 && ord.for < state.n) out.units[id] = { k: 'support', hex: ord.hex, for: ord.for };
     else if (k === 'bombard' && u.type === 'art' && state.hexes[ord.hex] && hdist(u.at, ord.hex) >= 1 && hdist(u.at, ord.hex) <= 2) out.units[id] = { k: 'bombard', hex: ord.hex };
     else if (k === 'raid' && u.type === 'cav') out.units[id] = { k: 'raid' };
     else if ((k === 'dig' || k === 'fortify' || k === 'repair') && u.type === 'eng') out.units[id] = { k };
     else if (k === 'bridge' && u.type === 'eng' && state.hexes[ord.hex] && hdist(u.at, ord.hex) === 1 && state.hexes[ord.hex].t === 'water') out.units[id] = { k: 'bridge', hex: ord.hex };
+    else if (k === 'merge' && u.type !== 'gen') { const t = state.units[ord.into]; if (t && t !== u && t.seat === seat && t.type === u.type && t.str < 10 && u.str < 10 && hdist(t.at, u.at) === 1) out.units[id] = { k: 'merge', into: t.id }; }
     else if (k === 'hold') out.units[id] = { k: 'hold' };
   }
   const s = state.seats[seat];
   let men = s.men, sup = s.sup, count = Object.values(state.units).filter(u => u.seat === seat && u.type !== 'gen').length; const cap = E.unitCap(state, seat);
+  // a detachment left behind is a new unit, so it needs room in the army
+  for (const [id, det] of detaches) if (count < cap) { out.units[id].detach = det; count++; }
   const hasGen = Object.values(state.units).some(u => u.seat === seat && u.type === 'gen');
   const used = new Set();
   for (const r of (o.recruit || []).slice(0, 8)) {
@@ -445,6 +457,9 @@ E.resolve = function (state, ordersBySeat) {
     for (const g of d.gift) { const a = state.seats[s], b = state.seats[g.to]; if (!b.alive) continue; const m = Math.min(g.men, a.men), su = Math.min(g.sup, a.sup); a.men -= m; a.sup -= su; b.men += m; b.sup += su; ev.push({ k: 'diplo', text: `${nameOf(state, s)} sends ${m} recruits and ${su} supply to ${nameOf(state, g.to)}.`, vis: [s, g.to] }); }
   }
   // 2. movement, one step at a time for everyone at once
+  // detachments: a marching unit leaves some of its men behind where it stands
+  const detached = [];
+  for (const id of Object.keys(state.units)) { const u = state.units[id], o = unitOrder(id); if (o.k !== 'move' || !o.detach || u.str <= o.detach) continue; const nid = 'u' + state.nextId++; state.units[nid] = { id: nid, seat: u.seat, type: u.type, at: u.at, str: o.detach }; u.str -= o.detach; detached.push([id, nid]); ev.push({ k: 'detach', hex: u.at, seat: u.seat, text: `${uname(state, u)} leaves ${o.detach} behind ${atName(state, u.at)} and marches on.` }); }
   const paths = {};
   for (const id in state.units) { const o = unitOrder(id); if (o.k === 'move') paths[id] = o.path.slice(); }
   const moved = {}, startAt = {}, contact = new Set();
@@ -498,6 +513,8 @@ E.resolve = function (state, ordersBySeat) {
     }
     if (!fixed) break;
   }
+  // a column that could not get away at all takes its detachment back
+  for (const [id, nid] of detached) { const u = state.units[id], d = state.units[nid]; if (u && d && u.at === d.at) { u.str += d.str; delete state.units[nid]; ev.push({ k: 'note', hex: u.at, seat: u.seat, text: `${uname(state, u)} cannot get away and keeps its detachment.` }); } }
   for (const id in moved) ev.push({ k: 'move', u: id, seat: state.units[id].seat, type: state.units[id].type, path: moved[id] });
   // heat: long marches cost men
   for (const id in moved) { const u = state.units[id]; if (moved[id].length >= 4 && E.weatherAt(fronts, u.at) === 'heat' && R() < 0.5) { u.str -= 1; ev.push({ k: 'attrition', hex: u.at, u: id, text: `${uname(state, u)} loses men to the heat.` }); } }
@@ -576,6 +593,10 @@ E.resolve = function (state, ordersBySeat) {
       if (h.rail && !h.railBroken) { h.railBroken = true; did = true; state.seats[u.seat].stats.raids++; }
       if (h.farm && h.farm.burned <= 0) { const ft = H[h.farm.town]; if (ft && ft.town && ft.town.owner !== u.seat) { h.farm.burned = 3; did = true; } }
       ev.push({ k: 'raid', hex: u.at, u: id, text: did ? `${uname(state, u)} tears up the railway and burns the farms at ${hexName(state, u.at)}.` : `${uname(state, u)} finds nothing to raid.` });
+    } else if (o.k === 'merge') {
+      const t = state.units[o.into];
+      if (t && t.str > 0 && t.seat === u.seat && hdist(t.at, u.at) === 1) { const lost = Math.max(0, t.str + u.str - 10); t.str = Math.min(10, t.str + u.str); fought.add(t.id); delete state.units[id]; ev.push({ k: 'merge', hex: t.at, seat: t.seat, text: `${uname(state, t)} ${atName(state, t.at)} takes in the men from ${atName(state, u.at)} (now ${t.str})${lost ? `; ${lost} more than it can hold go home` : ''}.` }); }
+      else ev.push({ k: 'note', hex: u.at, seat: u.seat, text: `${uname(state, u)} could not reach the unit it was to join.` });
     } else if (o.k === 'dig') { const max = E.eraOf(state, u.seat) >= 3 ? 3 : 2; if ((h.ent || 0) < max) { h.ent = (h.ent || 0) + 1; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} digs earthworks (${h.ent}).` }); } }
     else if (o.k === 'fortify' && h.town && h.town.owner === u.seat && h.town.fort < 3 && state.seats[u.seat].sup >= 2) { state.seats[u.seat].sup -= 2; h.town.fort++; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} fortifies ${h.town.name} (level ${h.town.fort}).` }); }
     else if (o.k === 'bridge' && state.seats[u.seat].sup >= 3) { const b = H[o.hex]; if (b && b.t === 'water' && !b.bridge) { state.seats[u.seat].sup -= 3; b.bridge = true; ev.push({ k: 'dig', hex: o.hex, text: `${uname(state, u)} throws a bridge across the river.` }); } }
@@ -593,12 +614,8 @@ E.resolve = function (state, ordersBySeat) {
   for (const k in H) if (H[k].farm && H[k].farm.burned > 0) H[k].farm.burned--;
   for (const s of state.seats) {
     if (!s.alive) continue;
-    let men = 0, sup = 0;
-    for (const k in H) { const h = H[k]; if (h.town && h.town.owner === s.seat) { men += KIND[h.town.kind].men; sup += KIND[h.town.kind].sup; } if (h.farm && h.farm.burned <= 0 && H[h.farm.town] && H[h.farm.town].town.owner === s.seat) sup += 1; }
-    // railway bonus: owned towns joined to the HQ by unbroken rail
-    if (H[s.hq].town.owner === s.seat) { const seen = new Set([s.hq]), q = [s.hq]; let linked = 0; while (q.length) { const c = q.shift(); for (const nb of nbrs(c)) { const x = H[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); if (x.town && x.town.owner === s.seat) linked++; } } } sup += linked; }
+    const { men, sup, up } = E.incomeOf(state, s.seat);
     const mine = Object.values(state.units).filter(u => u.seat === s.seat);
-    const up = mine.reduce((t, u) => t + UNIT[u.type].up, 0);
     s.men += men; s.sup += sup - up;
     s.income = { men, sup, up };
     if (s.sup < 0) { s.sup = 0; for (const u of mine) u.str -= 1; ev.push({ k: 'note', text: `${s.name || COLORS[s.seat].name} cannot feed its army: every unit loses men.`, seat: s.seat }); }
@@ -650,6 +667,7 @@ E.resolve = function (state, ordersBySeat) {
   for (const e of ev) {
     if (e.vis !== undefined && e.vis !== null) continue;
     const hx = [e.hex, e.from, e.to, e.advFrom, ...(e.path || [])].filter(Boolean);
+    if (!hx.length && e.k === 'note' && e.seat !== undefined) { e.vis = [e.seat]; continue; } // private news, e.g. your own army going hungry
     if (!hx.length || e.k === 'era' || e.k === 'end' || e.k === 'out' || e.k === 'capture') { e.vis = state.seats.map(s => s.seat); continue; }
     e.vis = state.seats.filter(s => (e.seat === s.seat) || hx.some(x => visBefore[s.seat].has(x) || visAfter[s.seat].has(x))).map(s => s.seat);
   }
@@ -669,6 +687,7 @@ function kill(state, u, by, ev) {
 }
 function nameOf(state, s) { if (s === NEUTRAL || s === null || s === undefined) return 'Local militia'; const st = state.seats[s]; return st.name || `the ${COLORS[s].name} army`; }
 function uname(state, u) { return `${u.seat === NEUTRAL ? 'Militia' : (state.seats[u.seat].name || COLORS[u.seat].name)} ${UNIT[u.type].name.toLowerCase()}`; }
+function atName(state, k) { return state.hexes[k].town ? 'at ' + state.hexes[k].town.name : hexName(state, k); }
 function hexName(state, k) { const h = state.hexes[k]; if (h.town) return h.town.name; const near = Object.keys(state.hexes).filter(x => state.hexes[x].town).sort((a, b) => hdist(a, k) - hdist(b, k))[0]; return `near ${state.hexes[near].town.name}`; }
 E.nameOf = nameOf; E.uname = uname; E.hexName = hexName;
 

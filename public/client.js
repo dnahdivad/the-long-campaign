@@ -148,7 +148,7 @@ function draw(now) {
   ctx.drawImage(dynCanvas, 0, 0);
   // strength plates in screen resolution
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (!anim) for (const id in V.units) { const u = V.units[id]; const [x0, y0] = hexXY(u.at); const [sx, sy] = toScreen(x0 + HW / 2, y0 + HH - 3); plate(sx, sy, u.str, u.seat); }
+  if (!anim) for (const id in V.units) { const u = V.units[id]; const [x0, y0] = hexXY(u.at); const [sx, sy] = toScreen(x0 + HW / 2, y0 + HH - 3); plate(sx, sy, u.str, u.seat); if (hungerSet.has(id)) hungerMark(sx + 10, sy - 2); }
   if (anim) { const t = (now / 1000 - anim.t0); for (const f of anim.flashes) if (t >= f.t && t < f.t + 1.4) { const [x0, y0] = hexXY(f.hex); const [sx, sy] = toScreen(x0 + HW / 2, y0 - 2); ctx.font = `bold ${Math.max(11, 4 * view.z)}px Georgia, serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#17110a'; ctx.strokeText(f.label, sx, sy - (t - f.t) * 10); ctx.fillStyle = f.col; ctx.fillText(f.label, sx, sy - (t - f.t) * 10); } }
   if (view.z >= 3) for (const k in V.hexes) { const h = V.hexes[k]; if (!h.town) continue; const [x0, y0] = hexXY(k); const [sx, sy] = toScreen(x0 + HW / 2, y0 + HH + 1); ctx.font = `${Math.round(view.z * 3.4)}px "IM Fell English", Georgia, serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,14,8,0.85)'; ctx.strokeText(h.town.name, sx, sy + 6); ctx.fillStyle = h.town.kind === 'city' ? '#ffe9a8' : '#f2e7c9'; ctx.fillText(h.town.name, sx, sy + 6); }
 }
@@ -158,6 +158,7 @@ function plate(sx, sy, str, seat) {
   const w = 14, h = 11; ctx.fillStyle = '#17110a'; ctx.fillRect(Math.round(sx - w / 2) - 1, Math.round(sy) - 1, w + 2, h + 2); ctx.fillStyle = FLAGC(seat); ctx.fillRect(Math.round(sx - w / 2), Math.round(sy), w, h);
   ctx.fillStyle = seat === E.NEUTRAL || (E.COLORS[seat] && (E.COLORS[seat].id === 'gold' || E.COLORS[seat].id === 'grey')) ? '#17110a' : '#fff'; ctx.font = 'bold 10px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(Math.max(0, Math.round(str))), Math.round(sx), Math.round(sy + h / 2 + 0.5)); ctx.textBaseline = 'alphabetic';
 }
+function hungerMark(sx, sy) { ctx.fillStyle = '#17110a'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 9, 13); ctx.fillStyle = '#d8402c'; ctx.fillRect(Math.round(sx), Math.round(sy), 7, 11); ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', Math.round(sx + 3.5), Math.round(sy + 6)); ctx.textBaseline = 'alphabetic'; }
 function fillHex(g, x0, y0) { x0 = Math.round(x0); y0 = Math.round(y0); for (let y = 0; y < HH; y++) { let a = -1, b = -1; for (let x = 0; x < HW; x++) if (MASK[y][x]) { if (a < 0) a = x; b = x; } if (a >= 0) g.fillRect(x0 + a, y0 + y, b - a + 1, 1); } }
 function outlineHex(g, x0, y0, col) { x0 = Math.round(x0); y0 = Math.round(y0); g.fillStyle = col; for (let y = 0; y < HH; y++) for (let x = 0; x < HW; x++) { if (!MASK[y][x]) continue; const edge = y === 0 || y === HH - 1 || x === 0 || x === HW - 1 || !MASK[y - 1][x] || !MASK[y + 1][x] || !MASK[y][x - 1] || !MASK[y][x + 1]; if (edge) g.fillRect(x0 + x, y0 + y, 1, 1); } }
 function blitUnit(g, type, seat, cx, cy, flip, t, str) {
@@ -178,8 +179,10 @@ function drawOrder(g, u, o) {
     let prev = A; const occ = occupancy();
     for (const k of o.path) { const [x, y] = hexXY(k), B = [x + HW / 2, y + HH / 2]; pline(g, prev[0], prev[1], B[0], B[1], '#17110a', 3); pline(g, prev[0], prev[1], B[0], B[1], occ[k] && occ[k].seat !== V.me ? '#ff6a4a' : '#ffe9a0', 1); prev = B; }
     g.fillStyle = '#ffe9a0'; g.fillRect(Math.round(prev[0] - 2), Math.round(prev[1] - 2), 4, 4);
-  } else if (o.k === 'support' || o.k === 'bombard' || o.k === 'bridge') {
-    const [x, y] = hexXY(o.hex), B = [x + HW / 2, y + HH / 2]; const col = o.k === 'support' ? FLAGC(o.for) : o.k === 'bombard' ? '#ff8a30' : '#9adcff';
+    if (o.detach) { g.fillStyle = '#17110a'; g.fillRect(Math.round(A[0] - 9), Math.round(A[1] - 12), 6, 5); g.fillStyle = FLAGC(V.me); g.fillRect(Math.round(A[0] - 8), Math.round(A[1] - 11), 4, 3); }
+  } else if (o.k === 'support' || o.k === 'bombard' || o.k === 'bridge' || (o.k === 'merge' && V.units[o.into])) {
+    const tgt = o.k === 'merge' ? V.units[o.into].at : o.hex;
+    const [x, y] = hexXY(tgt), B = [x + HW / 2, y + HH / 2]; const col = o.k === 'support' ? FLAGC(o.for) : o.k === 'bombard' ? '#ff8a30' : o.k === 'merge' ? '#8fe08a' : '#9adcff';
     for (let i = 0; i < 1; i += 0.08) { const px = A[0] + (B[0] - A[0]) * i, py = A[1] + (B[1] - A[1]) * i - Math.sin(i * Math.PI) * 6; g.fillStyle = '#17110a'; g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); g.fillStyle = col; g.fillRect(Math.round(px), Math.round(py), 1, 1); }
   } else {
     const label = { hold: '', raid: '#c84a2a', dig: '#8a6038', fortify: '#8a8a8a', repair: '#5a8ac8' }[o.k]; if (label) { g.fillStyle = '#17110a'; g.fillRect(Math.round(A[0] + 5), Math.round(A[1] - 11), 5, 5); g.fillStyle = label; g.fillRect(Math.round(A[0] + 6), Math.round(A[1] - 10), 3, 3); }
@@ -212,6 +215,8 @@ function startReplay() {
     if (e.k === 'bombard' && e.dmg) { flashes.push({ t, hex: e.hex, label: '−' + e.dmg, col: '#ffb060', boom: true }); t += 0.35; }
     if (e.k === 'battle') { flashes.push({ t, hex: e.hex, label: e.result === 'held' ? 'Repulsed!' : e.result === 'destroyed' ? 'Destroyed!' : 'Broken!', col: e.result === 'held' ? '#ffffff' : '#ff6a4a', boom: true }); t += 0.6; }
     if (e.k === 'capture' && e.hex) { flashes.push({ t, hex: e.hex, label: 'Taken', col: FLAGC(e.seat) }); t += 0.25; }
+    if (e.k === 'merge' && e.hex) { flashes.push({ t, hex: e.hex, label: 'Merged', col: '#8fe08a' }); }
+    if (e.k === 'detach' && e.hex) { flashes.push({ t: 0.2, hex: e.hex, label: 'Garrison', col: '#ffe9a0' }); }
     if (e.k === 'recruit' && e.hex) { flashes.push({ t, hex: e.hex, label: 'New ' + E.UNIT[e.type].name.toLowerCase(), col: '#ffe9a0' }); }
   }
   const moving = new Set(moves.map(e => e.u));
@@ -262,7 +267,7 @@ function tapHex(k) {
   if (mode) { finishMode(k); return; }
   const mine = myUnit(k), h = V.hexes[k];
   if (sel && reachCache && k !== sel.at && reachCache.best[k] !== undefined && !(mine && mine.id !== sel.id)) {
-    const path = E.pathTo(reachCache, sel.at, k); if (path && path.length) { orders.units[sel.id] = { k: 'move', path }; changed(); select(null); return; }
+    const path = E.pathTo(reachCache, sel.at, k); if (path && path.length) { const prev = orders.units[sel.id]; orders.units[sel.id] = { k: 'move', path, ...(prev && prev.k === 'move' && prev.detach ? { detach: prev.detach } : {}) }; changed(); select(null); return; }
   }
   if (mine) { select(mine); return; }
   if (h.town && h.town.owner === V.me && !occupancy()[k]) { select(null); openRecruit(k); return; }
@@ -275,15 +280,16 @@ function select(u) {
 }
 function startMode(m) {
   if (!sel) return; mode = m; const u = sel; const range = m === 'bombard' || (m === 'support' && u.type === 'art') ? 2 : 1;
-  const targets = Object.keys(V.hexes).filter(k => { const d = hdist(k, u.at); if (d < 1 || d > range) return false; if (m === 'bridge') return V.hexes[k].t === 'water' && !V.hexes[k].bridge; return true; });
+  const targets = Object.keys(V.hexes).filter(k => { const d = hdist(k, u.at); if (d < 1 || d > range) return false; if (m === 'bridge') return V.hexes[k].t === 'water' && !V.hexes[k].bridge; if (m === 'merge') { const o = occupancy()[k]; return !!o && o.seat === V.me && o.type === u.type && o.id !== u.id && o.str < 10; } return true; });
   modeData = { u, targets: new Set(targets) };
-  setStatus(m === 'support' ? 'Tap the hex this unit will support.' : m === 'bombard' ? 'Tap the hex to shell.' : 'Tap the river hex to bridge.');
+  setStatus(m === 'support' ? 'Tap the hex this unit will support.' : m === 'bombard' ? 'Tap the hex to shell.' : m === 'merge' ? 'Tap the unit to join. This unit stays put and its men go to that one, up to 10. It must still be next to it at the end of the month.' : 'Tap the river hex to bridge.');
 }
 function cancelMode() { mode = null; modeData = null; setStatus(''); }
 function finishMode(k) {
   const m = mode, u = modeData.u; if (!modeData.targets.has(k)) { cancelMode(); return; }
   cancelMode();
   if (m === 'support') { chooseSupportFor(u, k); return; }
+  if (m === 'merge') { orders.units[u.id] = { k: 'merge', into: occupancy()[k].id }; changed(); select(null); return; }
   orders.units[u.id] = { k: m, hex: k }; changed(); select(null);
 }
 function chooseSupportFor(u, k) {
@@ -318,15 +324,24 @@ function renderUnitPanel() {
   if (u.type === 'art') b('Bombard…', () => startMode('bombard'), o && o.k === 'bombard');
   if (u.type === 'cav') b('Raid', () => setOrder('raid'), o && o.k === 'raid');
   if (u.type === 'eng') { b('Dig in', () => setOrder('dig'), o && o.k === 'dig'); if (h.town && h.town.owner === V.me) b('Fortify (2 supply)', () => setOrder('fortify'), o && o.k === 'fortify'); b('Bridge… (3)', () => startMode('bridge'), o && o.k === 'bridge'); if (h.railBroken || nbrs(u.at).some(x => V.hexes[x] && V.hexes[x].railBroken)) b('Repair rail', () => setOrder('repair'), o && o.k === 'repair'); }
+  const partner = u.type !== 'gen' && u.str < 10 && nbrs(u.at).some(x => { const v = occupancy()[x]; return v && v.seat === V.me && v.type === u.type && v.str < 10; });
+  if (partner) b('Merge…', () => startMode('merge'), o && o.k === 'merge');
   if (o) b('Clear order', () => setOrder('clear'));
   b('Close', () => select(null));
   p.append(row);
+  // leaving a detachment behind on the march
+  if (o && o.k === 'move' && u.type !== 'gen' && u.str >= 2) {
+    const room = armySize() < capOf() || o.detach;
+    const drow = el('div', { class: 'row wrap', style: 'margin-top:6px' }, el('span', { class: 'small' }, 'Leave behind:'));
+    for (let n = 0; n <= Math.min(5, u.str - 1); n++) drow.append(el('button', { class: (o.detach || 0) === n ? 'on' : '', disabled: n && !room ? 'disabled' : null, onclick: () => { if (n) o.detach = n; else delete o.detach; changed(); renderUnitPanel(); } }, n ? String(n) : 'None'));
+    p.append(drow, el('div', { class: 'small hint' }, room ? 'Those men stay in this hex as a new unit and hold it; the rest march on.' : 'Your army is at its limit, so there is no room for a detachment.'));
+  } else if (u.type !== 'gen' && u.str >= 2 && h.town && h.town.owner === V.me && (!o || o.k !== 'move')) p.append(el('div', { class: 'small hint' }, 'To leave a garrison here, give this unit a march, then tap it again to choose how many stay behind.'));
 }
 function openRecruit(k) {
   const p = $('#recruit'), h = V.hexes[k], me = V.seats[V.me]; p.innerHTML = ''; p.style.display = 'block';
   const queued = orders.recruit.find(r => r.hex === k);
   const spent = orders.recruit.reduce((t, r) => ({ men: t.men + E.UNIT[r.type].men, sup: t.sup + E.UNIT[r.type].sup }), { men: 0, sup: 0 });
-  const units = Object.values(V.units).filter(u => u.seat === V.me && u.type !== 'gen').length + orders.recruit.filter(r => r.type !== 'gen').length;
+  const units = armySize();
   const cap = capOf(); const hasGen = Object.values(V.units).some(u => u.seat === V.me && u.type === 'gen') || orders.recruit.some(r => r.type === 'gen');
   p.append(el('div', { class: 'uhead' }, el('b', {}, h.town.name), ` · ${E.KIND[h.town.kind].name} · raise a new unit`), el('div', { class: 'small' }, `You have ${me.men - spent.men} recruits and ${me.sup - spent.sup} supply after other orders · army ${units}/${cap}`));
   const row = el('div', { class: 'row wrap' });
@@ -342,6 +357,44 @@ function openRecruit(k) {
   p.append(row);
 }
 function closeRecruit() { const p = $('#recruit'); if (p) { p.style.display = 'none'; p.innerHTML = ''; } }
+/* ---------------- will the army eat? (a forecast of this month's supply, from the orders as written) ---------------- */
+let hungerSet = new Set();
+function supplyCheck() {
+  const me = V.seats[V.me]; if (!me || me.sup === undefined || V.over) return null;
+  const inc = E.incomeOf(V, V.me), occ = occupancy(), fronts = V.weather.fronts;
+  let works = 0, upChange = 0; const hungry = [];
+  const gifts = ((orders.diplo && orders.diplo.gift) || []).reduce((t, g) => t + (g.sup || 0), 0);
+  const recruits = orders.recruit.reduce((t, r) => t + E.UNIT[r.type].sup, 0);
+  for (const u of Object.values(V.units)) {
+    if (u.seat !== V.me) continue; const o = orders.units[u.id];
+    if (o && o.k === 'fortify') { const h = V.hexes[u.at]; if (h.town && h.town.owner === V.me && h.town.fort < 3) works += 2; }
+    if (o && o.k === 'bridge') works += 3;
+    if (o && o.k === 'merge') { upChange -= E.UNIT[u.type].up; continue; }
+    let end = u.at;
+    if (o && o.k === 'move') { const p = o.path; end = p[p.length - 1]; if (occ[end] && occ[end].seat !== V.me) end = p.length > 1 ? p[p.length - 2] : u.at; }
+    const snow = E.weatherAt(fronts, end) === 'snow';
+    if (!E.inSupplyAt(V, V.me, end)) hungry.push({ u, end, loss: snow ? 2 : 1 });
+    if (o && o.k === 'move' && o.detach) { upChange += E.UNIT[u.type].up; if (!E.inSupplyAt(V, V.me, u.at)) hungry.push({ u, end: u.at, loss: E.weatherAt(fronts, u.at) === 'snow' ? 2 : 1, detachment: true }); }
+  }
+  const up = inc.up + upChange;
+  const afterUpkeep = me.sup - gifts - works + inc.sup - up;
+  return { inc, up, gifts, works, recruits, afterUpkeep, afterRecruits: afterUpkeep - recruits, hungry };
+}
+function supplyBox(full) {
+  const c = supplyCheck(); hungerSet = new Set(c ? c.hungry.filter(h => !h.detachment).map(h => h.u.id) : []);
+  if (!c) return null;
+  const starving = c.afterUpkeep < 0, short = !starving && c.afterRecruits < 0;
+  if (!full && !starving && !short && !c.hungry.length) return null;
+  const box = el('div', { class: 'warnbox' + (starving || c.hungry.length ? ' bad' : '') });
+  box.append(el('div', {}, el('b', {}, 'Supply this month: '), `+${c.inc.sup} income − ${c.up} upkeep${c.works ? ` − ${c.works} works` : ''}${c.gifts ? ` − ${c.gifts} gifts` : ''} → ${c.afterUpkeep} in hand${c.recruits ? `, ${c.afterRecruits} after recruits` : ''}.`));
+  if (starving) box.append(el('div', {}, '⚠ Not enough to feed the army: every unit will lose 1 strength. Order fewer works or gifts, merge units, or take a town.'));
+  else if (short) box.append(el('div', {}, '⚠ Not enough left for every recruit you have ordered: some will not be raised.'));
+  for (const h of c.hungry) box.append(el('div', { class: 'oline', onclick: () => { select(h.u); centerOn(h.u.at); } }, `⚠ ${h.detachment ? 'The detachment left by ' : ''}${E.UNIT[h.u.type].name} (${h.u.str}) ${h.end === h.u.at ? (V.hexes[h.end].town ? 'at ' : '') : 'marching to '}${hexLabel(h.end)} will be out of supply: −${h.loss}${h.loss > 1 ? ' in the snow' : ''}.`));
+  if (c.hungry.length) box.append(el('div', { class: 'small' }, 'In supply means within 4 hexes of a town you hold, or on unbroken railway back to one. Units marked ! on the map.'));
+  if (full) box.append(el('div', { class: 'small' }, 'Worked out from your orders and the towns you hold now; a town taken or lost this month changes it.'));
+  return box;
+}
+function armySize() { return Object.values(V.units).filter(u => u.seat === V.me && u.type !== 'gen').length + orders.recruit.filter(r => r.type !== 'gen').length + Object.entries(orders.units).filter(([id, o]) => V.units[id] && o.k === 'move' && o.detach).length; }
 function capOf() { let c = 4; for (const k in V.hexes) { const t = V.hexes[k].town; if (t && t.owner === V.me) c += E.KIND[t.kind].cap; } return c; }
 function describeHex(k) {
   const h = V.hexes[k], w = E.weatherAt(V.weather.fronts, k), u = occupancy()[k];
@@ -391,8 +444,9 @@ function renderSide() {
     const mine = Object.values(V.units).filter(u => u.seat === V.me);
     const n = Object.keys(orders.units).filter(id => V.units[id]).length;
     body.append(el('p', { class: 'small' }, `${n} of ${mine.length} units have orders; the rest hold their ground (infantry holding in the open dig a shallow trench). ${orders.recruit.length ? orders.recruit.length + ' new unit' + (orders.recruit.length > 1 ? 's' : '') + ' ordered.' : 'Tap one of your towns to raise troops.'}`));
+    const sb = supplyBox(true); if (sb) body.append(sb);
     const list = el('div', { class: 'olist' });
-    for (const u of mine.sort((a, b) => a.type.localeCompare(b.type))) { const o = orders.units[u.id]; list.append(el('div', { class: 'oline', onclick: () => { select(u); centerOn(u.at); } }, el('span', { class: 'sw', style: `--c:${E.COLORS[V.me].ui}` }), `${E.UNIT[u.type].name} (${u.str}) ${V.hexes[u.at].town ? 'at ' : ''}${hexLabel(u.at)}: `, el('i', {}, describeOrder(o)))); }
+    for (const u of mine.sort((a, b) => a.type.localeCompare(b.type))) { const o = orders.units[u.id]; list.append(el('div', { class: 'oline', onclick: () => { select(u); centerOn(u.at); } }, el('span', { class: 'sw', style: `--c:${E.COLORS[V.me].ui}` }), `${E.UNIT[u.type].name} (${u.str}) ${V.hexes[u.at].town ? 'at ' : ''}${hexLabel(u.at)}: `, el('i', {}, describeOrder(o)), hungerSet.has(u.id) ? el('b', { class: 'hungry' }, ' · out of supply') : '')); }
     body.append(list);
     if (!V.over) body.append(el('div', { class: 'submit' },
       el('button', { class: 'primary', onclick: submit }, V.deadline ? (V.myOrders && !dirty ? 'Orders sent ✓ — send again' : 'Send my orders') : 'Fight the month'),
@@ -426,6 +480,7 @@ function renderSide() {
     const nextEra = Math.min(3, Math.floor((V.turn - 1) / V.eraTurns) + 1); if (nextEra > Math.floor((V.turn - 1) / V.eraTurns)) body.append(el('p', { class: 'small' }, `Coming in ${E.ERAS[nextEra].year} (turn ${nextEra * V.eraTurns + 1}): ${E.ERAS[nextEra].name}. ${E.ERAS[nextEra].text} Whoever holds the Capital's foundry gets each improvement early.`));
   }
   if (tab === 'news') {
+    const sb = supplyBox(false); if (sb) body.append(el('h4', {}, 'Before you send orders'), sb);
     body.append(el('button', { onclick: startReplay, disabled: (V.events || []).length ? null : 'disabled' }, '▶ Replay last month'));
     const byTurn = {}; for (const l of V.log || []) (byTurn[l.turn] = byTurn[l.turn] || []).push(l.text);
     for (const t of Object.keys(byTurn).sort((a, b) => b - a).slice(0, 8)) body.append(el('h4', {}, +t === 0 ? 'The outbreak' : E.dateOf(V, +t).label), el('ul', { class: 'news' }, ...byTurn[t].map(x => el('li', {}, x))));
@@ -440,8 +495,10 @@ const RULES = `
 <p><b>Recruits and supply.</b> Towns give recruits and supply; farms and railways add supply. Every unit eats supply each month. Units more than four hexes from your towns, and off your railways, are out of supply and lose men — twice as fast in snow. Units in supply that did not fight regain strength each month (1 supply in a town, 2 in the field). Your army can be no larger than your towns allow: 4, plus 1 per town, 4 for headquarters and 3 for the Capital.</p>
 <p><b>Weather</b> drifts across the map in fronts. Rain makes mud, floods fords and keeps guns to the roads. Fog blinds scouts and artillery. Heat wears out long marches. The forecast for next month is usually right; the one after is often wrong.</p>
 <p><b>Diplomacy.</b> Share your scouts' reports, grant free passage, or send recruits and supply to another army. Any of it can be withdrawn next month.</p>
-<p><b>Cavalry</b> raid railways and farms. <b>Engineers</b> dig earthworks, fortify towns, bridge rivers and mend railways. A <b>general</b> makes the units around him fight 15% better.</p>`;
-function describeOrder(o) { if (!o) return 'hold'; if (o.k === 'move') { const last = o.path[o.path.length - 1], occ = occupancy()[last], where = hexLabel(last), town = !!V.hexes[last].town; return occ && occ.seat !== V.me ? `attack ${town ? '' : 'the enemy '}${where}` : town ? `march to ${where}` : `march ${where}`; } if (o.k === 'support') return `support ${o.for === V.me ? 'my army' : seatName(o.for)} ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bombard') return `shell the enemy ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bridge') return 'build a bridge'; return { hold: 'hold', raid: 'raid', dig: 'dig earthworks', fortify: 'fortify the town', repair: 'repair the railway' }[o.k] || o.k; }
+<p><b>Cavalry</b> raid railways and farms. <b>Engineers</b> dig earthworks, fortify towns, bridge rivers and mend railways. A <b>general</b> makes the units around him fight 15% better.</p>
+<p><b>Merging and garrisons.</b> Two weak units of the same kind standing side by side can merge: tap one, press Merge…, then tap the other (up to strength 10). To leave a garrison, give a unit a march, tap it again and choose how many men stay behind.</p>
+<p><b>Hunger.</b> The Orders tab warns before you send orders if your supply will not cover upkeep, or if a unit will end the month out of supply (marked ! on the map).</p>`;
+function describeOrder(o) { if (!o) return 'hold'; if (o.k === 'merge') { const t = V.units[o.into]; return t ? `merge into the ${E.UNIT[t.type].name.toLowerCase()} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)} (${t.str})` : 'merge'; } if (o.k === 'move' && o.detach) return describeOrder({ k: 'move', path: o.path }) + `, leaving ${o.detach} behind`; if (o.k === 'move') { const last = o.path[o.path.length - 1], occ = occupancy()[last], where = hexLabel(last), town = !!V.hexes[last].town; return occ && occ.seat !== V.me ? `attack ${town ? '' : 'the enemy '}${where}` : town ? `march to ${where}` : `march ${where}`; } if (o.k === 'support') return `support ${o.for === V.me ? 'my army' : seatName(o.for)} ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bombard') return `shell the enemy ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bridge') return 'build a bridge'; return { hold: 'hold', raid: 'raid', dig: 'dig earthworks', fortify: 'fortify the town', repair: 'repair the railway' }[o.k] || o.k; }
 function hexLabel(k) { const h = V.hexes[k]; if (h.town) return h.town.name; let best = null, bd = 99; for (const x in V.hexes) if (V.hexes[x].town) { const d = hdist(x, k); if (d < bd) { bd = d; best = x; } } return `near ${V.hexes[best].town.name}`; }
 function centerOn(k) { const [x, y] = hexXY(k); view.x = x + HW / 2; view.y = y + HH / 2; }
 function renderOver() {

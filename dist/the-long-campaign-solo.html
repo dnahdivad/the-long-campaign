@@ -62,6 +62,10 @@ a { color: var(--brass); }
 .secret { background: #2a1d12; color: #f2e7c9; padding: 10px 12px; border-radius: 3px; font-size: 16px; }
 .secret .small { color: #d9c491; margin-top: 4px; }
 h4 { font-family: var(--f-display); font-weight: normal; font-size: 16px; margin: 14px 0 4px; }
+.warnbox { border: 1.5px solid var(--ink2); border-radius: 3px; padding: 8px 10px; margin: 6px 0 10px; font-size: 14px; line-height: 1.35; background: rgba(42, 29, 18, 0.05); }
+.warnbox.bad { border-color: var(--blood); background: rgba(154, 47, 34, 0.08); }
+.warnbox > div { margin: 2px 0; }
+.hungry { color: var(--blood); font-style: normal; }
 .news { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.35; }
 .rules p { margin: 0 0 8px; }
 .over { background: #3a2816; color: #f2e7c9; padding: 10px 12px; border-radius: 3px; margin-bottom: 10px; }
@@ -453,7 +457,7 @@ E.view = function (state, seat) {
   return {
     v: state.v, id: state.id, name: state.name, R: state.R, n: state.n, seed: state.seed, turn: state.turn, mode: state.mode, turnLimit: state.turnLimit, eraTurns: state.eraTurns, startMonth: state.startMonth, startYear: state.startYear,
     center: state.center, hexes: state.hexes, units, seats, me: seat, rel: state.rel, visible: [...vis], weather: { fronts: state.weather.fronts, forecast: state.weather.forecast }, capitalHold: state.capitalHold,
-    events: ev.map(e => { const c = { ...e }; delete c.vis; return c; }), log: state.log.slice(-60), over: state.over, deadline: state.deadline, myOrders: state.orders && state.orders[seat] || null
+    events: ev.map(e => { const c = { ...e }; delete c.vis; return c; }), log: state.log.filter(l => !l.vis || l.vis.includes(seat) || state.over).slice(-60).map(l => ({ turn: l.turn, text: l.text })), over: state.over, deadline: state.deadline, myOrders: state.orders && state.orders[seat] || null
   };
 };
 
@@ -481,38 +485,50 @@ E.goalMet = function (state, seat) {
   return false;
 };
 E.unitCap = (state, seat) => { let c = 4; for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === seat) c += KIND[t.kind].cap; } return c; };
-E.inSupply = function (state, u) {
-  if (u.seat === NEUTRAL) return true;
-  for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === u.seat && hdist(k, u.at) <= 4) return true; }
+// a month's income from towns, farms and rail, and the upkeep of the army as it stands
+E.incomeOf = function (state, seat) {
+  const H = state.hexes; let men = 0, sup = 0;
+  for (const k in H) { const h = H[k]; if (h.town && h.town.owner === seat) { men += KIND[h.town.kind].men; sup += KIND[h.town.kind].sup; } if (h.farm && h.farm.burned <= 0 && H[h.farm.town] && H[h.farm.town].town.owner === seat) sup += 1; }
+  const hq = state.seats[seat].hq;
+  if (H[hq].town.owner === seat) { const seen = new Set([hq]), q = [hq]; while (q.length) { const c = q.shift(); for (const nb of nbrs(c)) { const x = H[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); if (x.town && x.town.owner === seat) sup += 1; } } } }
+  const up = Object.values(state.units).filter(u => u.seat === seat).reduce((t, u) => t + UNIT[u.type].up, 0);
+  return { men, sup, up };
+};
+E.inSupply = function (state, u) { return u.seat === NEUTRAL || E.inSupplyAt(state, u.seat, u.at); };
+E.inSupplyAt = function (state, seat, at) {
+  for (const k in state.hexes) { const t = state.hexes[k].town; if (t && t.owner === seat && hdist(k, at) <= 4) return true; }
   // railheads: an unbroken line back to an owned town
-  const h = state.hexes[u.at]; if (!h.rail || h.railBroken) return false;
-  const seen = new Set([u.at]), q = [u.at];
-  while (q.length) { const c = q.shift(); const t = state.hexes[c].town; if (t && t.owner === u.seat) return true; for (const nb of nbrs(c)) { const x = state.hexes[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); } } }
+  const h = state.hexes[at]; if (!h.rail || h.railBroken) return false;
+  const seen = new Set([at]), q = [at];
+  while (q.length) { const c = q.shift(); const t = state.hexes[c].town; if (t && t.owner === seat) return true; for (const nb of nbrs(c)) { const x = state.hexes[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); } } }
   return false;
 };
 
 /* ---------------- orders ---------------- */
-// orders = { units: {id: {k:'move', path:[...]} | {k:'hold'} | {k:'support', hex, for} | {k:'bombard', hex} | {k:'raid'} | {k:'dig'} | {k:'fortify'} | {k:'bridge', hex} | {k:'repair'} }, recruit: [{hex, type}], diplo: {sight:[], passage:[], gift: [{to, men, sup}]} }
+// orders = { units: {id: {k:'move', path:[...]} | {k:'hold'} | {k:'support', hex, for} | {k:'bombard', hex} | {k:'raid'} | {k:'dig'} | {k:'fortify'} | {k:'bridge', hex} | {k:'repair'} | {k:'merge', into} }, a move may carry detach: n, recruit: [{hex, type}], diplo: {sight:[], passage:[], gift: [{to, men, sup}]} }
 E.cleanOrders = function (state, seat, o) {
   const out = { units: {}, recruit: [], diplo: { sight: state.rel.sight[seat].slice(), passage: state.rel.passage[seat].slice(), gift: [] } };
   if (!o || typeof o !== 'object') return out;
-  const occ = E.occupancy(state);
+  const occ = E.occupancy(state), detaches = [];
   for (const id in (o.units || {})) {
     const u = state.units[id], ord = o.units[id]; if (!u || u.seat !== seat || !ord) continue;
     const k = ord.k;
     if (k === 'move' && Array.isArray(ord.path) && ord.path.length) {
       let cur = u.at, cost = 0; const path = [];
       for (const x of ord.path.slice(0, 12)) { if (typeof x !== 'string' || !state.hexes[x] || hdist(cur, x) !== 1) break; const c = E.stepCost(state, u.type, cur, x, state.weather.fronts); if (!isFinite(c) || cost + c > UNIT[u.type].mp + 1e-9) break; cost += c; path.push(x); cur = x; }
-      if (path.length) out.units[id] = { k: 'move', path };
+      if (path.length) { out.units[id] = { k: 'move', path }; const det = ord.detach | 0; if (det >= 1 && det < u.str && u.type !== 'gen') detaches.push([id, det]); }
     } else if (k === 'support' && state.hexes[ord.hex] && hdist(u.at, ord.hex) <= (u.type === 'art' ? 2 : 1) && hdist(u.at, ord.hex) >= 1 && Number.isInteger(ord.for) && ord.for >= 0 && ord.for < state.n) out.units[id] = { k: 'support', hex: ord.hex, for: ord.for };
     else if (k === 'bombard' && u.type === 'art' && state.hexes[ord.hex] && hdist(u.at, ord.hex) >= 1 && hdist(u.at, ord.hex) <= 2) out.units[id] = { k: 'bombard', hex: ord.hex };
     else if (k === 'raid' && u.type === 'cav') out.units[id] = { k: 'raid' };
     else if ((k === 'dig' || k === 'fortify' || k === 'repair') && u.type === 'eng') out.units[id] = { k };
     else if (k === 'bridge' && u.type === 'eng' && state.hexes[ord.hex] && hdist(u.at, ord.hex) === 1 && state.hexes[ord.hex].t === 'water') out.units[id] = { k: 'bridge', hex: ord.hex };
+    else if (k === 'merge' && u.type !== 'gen') { const t = state.units[ord.into]; if (t && t !== u && t.seat === seat && t.type === u.type && t.str < 10 && u.str < 10 && hdist(t.at, u.at) === 1) out.units[id] = { k: 'merge', into: t.id }; }
     else if (k === 'hold') out.units[id] = { k: 'hold' };
   }
   const s = state.seats[seat];
   let men = s.men, sup = s.sup, count = Object.values(state.units).filter(u => u.seat === seat && u.type !== 'gen').length; const cap = E.unitCap(state, seat);
+  // a detachment left behind is a new unit, so it needs room in the army
+  for (const [id, det] of detaches) if (count < cap) { out.units[id].detach = det; count++; }
   const hasGen = Object.values(state.units).some(u => u.seat === seat && u.type === 'gen');
   const used = new Set();
   for (const r of (o.recruit || []).slice(0, 8)) {
@@ -568,6 +584,9 @@ E.resolve = function (state, ordersBySeat) {
     for (const g of d.gift) { const a = state.seats[s], b = state.seats[g.to]; if (!b.alive) continue; const m = Math.min(g.men, a.men), su = Math.min(g.sup, a.sup); a.men -= m; a.sup -= su; b.men += m; b.sup += su; ev.push({ k: 'diplo', text: `${nameOf(state, s)} sends ${m} recruits and ${su} supply to ${nameOf(state, g.to)}.`, vis: [s, g.to] }); }
   }
   // 2. movement, one step at a time for everyone at once
+  // detachments: a marching unit leaves some of its men behind where it stands
+  const detached = [];
+  for (const id of Object.keys(state.units)) { const u = state.units[id], o = unitOrder(id); if (o.k !== 'move' || !o.detach || u.str <= o.detach) continue; const nid = 'u' + state.nextId++; state.units[nid] = { id: nid, seat: u.seat, type: u.type, at: u.at, str: o.detach }; u.str -= o.detach; detached.push([id, nid]); ev.push({ k: 'detach', hex: u.at, seat: u.seat, text: `${uname(state, u)} leaves ${o.detach} behind ${atName(state, u.at)} and marches on.` }); }
   const paths = {};
   for (const id in state.units) { const o = unitOrder(id); if (o.k === 'move') paths[id] = o.path.slice(); }
   const moved = {}, startAt = {}, contact = new Set();
@@ -621,6 +640,8 @@ E.resolve = function (state, ordersBySeat) {
     }
     if (!fixed) break;
   }
+  // a column that could not get away at all takes its detachment back
+  for (const [id, nid] of detached) { const u = state.units[id], d = state.units[nid]; if (u && d && u.at === d.at) { u.str += d.str; delete state.units[nid]; ev.push({ k: 'note', hex: u.at, seat: u.seat, text: `${uname(state, u)} cannot get away and keeps its detachment.` }); } }
   for (const id in moved) ev.push({ k: 'move', u: id, seat: state.units[id].seat, type: state.units[id].type, path: moved[id] });
   // heat: long marches cost men
   for (const id in moved) { const u = state.units[id]; if (moved[id].length >= 4 && E.weatherAt(fronts, u.at) === 'heat' && R() < 0.5) { u.str -= 1; ev.push({ k: 'attrition', hex: u.at, u: id, text: `${uname(state, u)} loses men to the heat.` }); } }
@@ -699,6 +720,10 @@ E.resolve = function (state, ordersBySeat) {
       if (h.rail && !h.railBroken) { h.railBroken = true; did = true; state.seats[u.seat].stats.raids++; }
       if (h.farm && h.farm.burned <= 0) { const ft = H[h.farm.town]; if (ft && ft.town && ft.town.owner !== u.seat) { h.farm.burned = 3; did = true; } }
       ev.push({ k: 'raid', hex: u.at, u: id, text: did ? `${uname(state, u)} tears up the railway and burns the farms at ${hexName(state, u.at)}.` : `${uname(state, u)} finds nothing to raid.` });
+    } else if (o.k === 'merge') {
+      const t = state.units[o.into];
+      if (t && t.str > 0 && t.seat === u.seat && hdist(t.at, u.at) === 1) { const lost = Math.max(0, t.str + u.str - 10); t.str = Math.min(10, t.str + u.str); fought.add(t.id); delete state.units[id]; ev.push({ k: 'merge', hex: t.at, seat: t.seat, text: `${uname(state, t)} ${atName(state, t.at)} takes in the men from ${atName(state, u.at)} (now ${t.str})${lost ? `; ${lost} more than it can hold go home` : ''}.` }); }
+      else ev.push({ k: 'note', hex: u.at, seat: u.seat, text: `${uname(state, u)} could not reach the unit it was to join.` });
     } else if (o.k === 'dig') { const max = E.eraOf(state, u.seat) >= 3 ? 3 : 2; if ((h.ent || 0) < max) { h.ent = (h.ent || 0) + 1; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} digs earthworks (${h.ent}).` }); } }
     else if (o.k === 'fortify' && h.town && h.town.owner === u.seat && h.town.fort < 3 && state.seats[u.seat].sup >= 2) { state.seats[u.seat].sup -= 2; h.town.fort++; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} fortifies ${h.town.name} (level ${h.town.fort}).` }); }
     else if (o.k === 'bridge' && state.seats[u.seat].sup >= 3) { const b = H[o.hex]; if (b && b.t === 'water' && !b.bridge) { state.seats[u.seat].sup -= 3; b.bridge = true; ev.push({ k: 'dig', hex: o.hex, text: `${uname(state, u)} throws a bridge across the river.` }); } }
@@ -716,12 +741,8 @@ E.resolve = function (state, ordersBySeat) {
   for (const k in H) if (H[k].farm && H[k].farm.burned > 0) H[k].farm.burned--;
   for (const s of state.seats) {
     if (!s.alive) continue;
-    let men = 0, sup = 0;
-    for (const k in H) { const h = H[k]; if (h.town && h.town.owner === s.seat) { men += KIND[h.town.kind].men; sup += KIND[h.town.kind].sup; } if (h.farm && h.farm.burned <= 0 && H[h.farm.town] && H[h.farm.town].town.owner === s.seat) sup += 1; }
-    // railway bonus: owned towns joined to the HQ by unbroken rail
-    if (H[s.hq].town.owner === s.seat) { const seen = new Set([s.hq]), q = [s.hq]; let linked = 0; while (q.length) { const c = q.shift(); for (const nb of nbrs(c)) { const x = H[nb]; if (x && x.rail && !x.railBroken && !seen.has(nb)) { seen.add(nb); q.push(nb); if (x.town && x.town.owner === s.seat) linked++; } } } sup += linked; }
+    const { men, sup, up } = E.incomeOf(state, s.seat);
     const mine = Object.values(state.units).filter(u => u.seat === s.seat);
-    const up = mine.reduce((t, u) => t + UNIT[u.type].up, 0);
     s.men += men; s.sup += sup - up;
     s.income = { men, sup, up };
     if (s.sup < 0) { s.sup = 0; for (const u of mine) u.str -= 1; ev.push({ k: 'note', text: `${s.name || COLORS[s.seat].name} cannot feed its army: every unit loses men.`, seat: s.seat }); }
@@ -773,6 +794,7 @@ E.resolve = function (state, ordersBySeat) {
   for (const e of ev) {
     if (e.vis !== undefined && e.vis !== null) continue;
     const hx = [e.hex, e.from, e.to, e.advFrom, ...(e.path || [])].filter(Boolean);
+    if (!hx.length && e.k === 'note' && e.seat !== undefined) { e.vis = [e.seat]; continue; } // private news, e.g. your own army going hungry
     if (!hx.length || e.k === 'era' || e.k === 'end' || e.k === 'out' || e.k === 'capture') { e.vis = state.seats.map(s => s.seat); continue; }
     e.vis = state.seats.filter(s => (e.seat === s.seat) || hx.some(x => visBefore[s.seat].has(x) || visAfter[s.seat].has(x))).map(s => s.seat);
   }
@@ -792,6 +814,7 @@ function kill(state, u, by, ev) {
 }
 function nameOf(state, s) { if (s === NEUTRAL || s === null || s === undefined) return 'Local militia'; const st = state.seats[s]; return st.name || `the ${COLORS[s].name} army`; }
 function uname(state, u) { return `${u.seat === NEUTRAL ? 'Militia' : (state.seats[u.seat].name || COLORS[u.seat].name)} ${UNIT[u.type].name.toLowerCase()}`; }
+function atName(state, k) { return state.hexes[k].town ? 'at ' + state.hexes[k].town.name : hexName(state, k); }
 function hexName(state, k) { const h = state.hexes[k]; if (h.town) return h.town.name; const near = Object.keys(state.hexes).filter(x => state.hexes[x].town).sort((a, b) => hdist(a, k) - hdist(b, k))[0]; return `near ${state.hexes[near].town.name}`; }
 E.nameOf = nameOf; E.uname = uname; E.hexName = hexName;
 
@@ -1009,7 +1032,7 @@ function draw(now) {
   ctx.drawImage(dynCanvas, 0, 0);
   // strength plates in screen resolution
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (!anim) for (const id in V.units) { const u = V.units[id]; const [x0, y0] = hexXY(u.at); const [sx, sy] = toScreen(x0 + HW / 2, y0 + HH - 3); plate(sx, sy, u.str, u.seat); }
+  if (!anim) for (const id in V.units) { const u = V.units[id]; const [x0, y0] = hexXY(u.at); const [sx, sy] = toScreen(x0 + HW / 2, y0 + HH - 3); plate(sx, sy, u.str, u.seat); if (hungerSet.has(id)) hungerMark(sx + 10, sy - 2); }
   if (anim) { const t = (now / 1000 - anim.t0); for (const f of anim.flashes) if (t >= f.t && t < f.t + 1.4) { const [x0, y0] = hexXY(f.hex); const [sx, sy] = toScreen(x0 + HW / 2, y0 - 2); ctx.font = `bold ${Math.max(11, 4 * view.z)}px Georgia, serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = '#17110a'; ctx.strokeText(f.label, sx, sy - (t - f.t) * 10); ctx.fillStyle = f.col; ctx.fillText(f.label, sx, sy - (t - f.t) * 10); } }
   if (view.z >= 3) for (const k in V.hexes) { const h = V.hexes[k]; if (!h.town) continue; const [x0, y0] = hexXY(k); const [sx, sy] = toScreen(x0 + HW / 2, y0 + HH + 1); ctx.font = `${Math.round(view.z * 3.4)}px "IM Fell English", Georgia, serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,14,8,0.85)'; ctx.strokeText(h.town.name, sx, sy + 6); ctx.fillStyle = h.town.kind === 'city' ? '#ffe9a8' : '#f2e7c9'; ctx.fillText(h.town.name, sx, sy + 6); }
 }
@@ -1019,6 +1042,7 @@ function plate(sx, sy, str, seat) {
   const w = 14, h = 11; ctx.fillStyle = '#17110a'; ctx.fillRect(Math.round(sx - w / 2) - 1, Math.round(sy) - 1, w + 2, h + 2); ctx.fillStyle = FLAGC(seat); ctx.fillRect(Math.round(sx - w / 2), Math.round(sy), w, h);
   ctx.fillStyle = seat === E.NEUTRAL || (E.COLORS[seat] && (E.COLORS[seat].id === 'gold' || E.COLORS[seat].id === 'grey')) ? '#17110a' : '#fff'; ctx.font = 'bold 10px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(Math.max(0, Math.round(str))), Math.round(sx), Math.round(sy + h / 2 + 0.5)); ctx.textBaseline = 'alphabetic';
 }
+function hungerMark(sx, sy) { ctx.fillStyle = '#17110a'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 9, 13); ctx.fillStyle = '#d8402c'; ctx.fillRect(Math.round(sx), Math.round(sy), 7, 11); ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', Math.round(sx + 3.5), Math.round(sy + 6)); ctx.textBaseline = 'alphabetic'; }
 function fillHex(g, x0, y0) { x0 = Math.round(x0); y0 = Math.round(y0); for (let y = 0; y < HH; y++) { let a = -1, b = -1; for (let x = 0; x < HW; x++) if (MASK[y][x]) { if (a < 0) a = x; b = x; } if (a >= 0) g.fillRect(x0 + a, y0 + y, b - a + 1, 1); } }
 function outlineHex(g, x0, y0, col) { x0 = Math.round(x0); y0 = Math.round(y0); g.fillStyle = col; for (let y = 0; y < HH; y++) for (let x = 0; x < HW; x++) { if (!MASK[y][x]) continue; const edge = y === 0 || y === HH - 1 || x === 0 || x === HW - 1 || !MASK[y - 1][x] || !MASK[y + 1][x] || !MASK[y][x - 1] || !MASK[y][x + 1]; if (edge) g.fillRect(x0 + x, y0 + y, 1, 1); } }
 function blitUnit(g, type, seat, cx, cy, flip, t, str) {
@@ -1039,8 +1063,10 @@ function drawOrder(g, u, o) {
     let prev = A; const occ = occupancy();
     for (const k of o.path) { const [x, y] = hexXY(k), B = [x + HW / 2, y + HH / 2]; pline(g, prev[0], prev[1], B[0], B[1], '#17110a', 3); pline(g, prev[0], prev[1], B[0], B[1], occ[k] && occ[k].seat !== V.me ? '#ff6a4a' : '#ffe9a0', 1); prev = B; }
     g.fillStyle = '#ffe9a0'; g.fillRect(Math.round(prev[0] - 2), Math.round(prev[1] - 2), 4, 4);
-  } else if (o.k === 'support' || o.k === 'bombard' || o.k === 'bridge') {
-    const [x, y] = hexXY(o.hex), B = [x + HW / 2, y + HH / 2]; const col = o.k === 'support' ? FLAGC(o.for) : o.k === 'bombard' ? '#ff8a30' : '#9adcff';
+    if (o.detach) { g.fillStyle = '#17110a'; g.fillRect(Math.round(A[0] - 9), Math.round(A[1] - 12), 6, 5); g.fillStyle = FLAGC(V.me); g.fillRect(Math.round(A[0] - 8), Math.round(A[1] - 11), 4, 3); }
+  } else if (o.k === 'support' || o.k === 'bombard' || o.k === 'bridge' || (o.k === 'merge' && V.units[o.into])) {
+    const tgt = o.k === 'merge' ? V.units[o.into].at : o.hex;
+    const [x, y] = hexXY(tgt), B = [x + HW / 2, y + HH / 2]; const col = o.k === 'support' ? FLAGC(o.for) : o.k === 'bombard' ? '#ff8a30' : o.k === 'merge' ? '#8fe08a' : '#9adcff';
     for (let i = 0; i < 1; i += 0.08) { const px = A[0] + (B[0] - A[0]) * i, py = A[1] + (B[1] - A[1]) * i - Math.sin(i * Math.PI) * 6; g.fillStyle = '#17110a'; g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); g.fillStyle = col; g.fillRect(Math.round(px), Math.round(py), 1, 1); }
   } else {
     const label = { hold: '', raid: '#c84a2a', dig: '#8a6038', fortify: '#8a8a8a', repair: '#5a8ac8' }[o.k]; if (label) { g.fillStyle = '#17110a'; g.fillRect(Math.round(A[0] + 5), Math.round(A[1] - 11), 5, 5); g.fillStyle = label; g.fillRect(Math.round(A[0] + 6), Math.round(A[1] - 10), 3, 3); }
@@ -1073,6 +1099,8 @@ function startReplay() {
     if (e.k === 'bombard' && e.dmg) { flashes.push({ t, hex: e.hex, label: '−' + e.dmg, col: '#ffb060', boom: true }); t += 0.35; }
     if (e.k === 'battle') { flashes.push({ t, hex: e.hex, label: e.result === 'held' ? 'Repulsed!' : e.result === 'destroyed' ? 'Destroyed!' : 'Broken!', col: e.result === 'held' ? '#ffffff' : '#ff6a4a', boom: true }); t += 0.6; }
     if (e.k === 'capture' && e.hex) { flashes.push({ t, hex: e.hex, label: 'Taken', col: FLAGC(e.seat) }); t += 0.25; }
+    if (e.k === 'merge' && e.hex) { flashes.push({ t, hex: e.hex, label: 'Merged', col: '#8fe08a' }); }
+    if (e.k === 'detach' && e.hex) { flashes.push({ t: 0.2, hex: e.hex, label: 'Garrison', col: '#ffe9a0' }); }
     if (e.k === 'recruit' && e.hex) { flashes.push({ t, hex: e.hex, label: 'New ' + E.UNIT[e.type].name.toLowerCase(), col: '#ffe9a0' }); }
   }
   const moving = new Set(moves.map(e => e.u));
@@ -1123,7 +1151,7 @@ function tapHex(k) {
   if (mode) { finishMode(k); return; }
   const mine = myUnit(k), h = V.hexes[k];
   if (sel && reachCache && k !== sel.at && reachCache.best[k] !== undefined && !(mine && mine.id !== sel.id)) {
-    const path = E.pathTo(reachCache, sel.at, k); if (path && path.length) { orders.units[sel.id] = { k: 'move', path }; changed(); select(null); return; }
+    const path = E.pathTo(reachCache, sel.at, k); if (path && path.length) { const prev = orders.units[sel.id]; orders.units[sel.id] = { k: 'move', path, ...(prev && prev.k === 'move' && prev.detach ? { detach: prev.detach } : {}) }; changed(); select(null); return; }
   }
   if (mine) { select(mine); return; }
   if (h.town && h.town.owner === V.me && !occupancy()[k]) { select(null); openRecruit(k); return; }
@@ -1136,15 +1164,16 @@ function select(u) {
 }
 function startMode(m) {
   if (!sel) return; mode = m; const u = sel; const range = m === 'bombard' || (m === 'support' && u.type === 'art') ? 2 : 1;
-  const targets = Object.keys(V.hexes).filter(k => { const d = hdist(k, u.at); if (d < 1 || d > range) return false; if (m === 'bridge') return V.hexes[k].t === 'water' && !V.hexes[k].bridge; return true; });
+  const targets = Object.keys(V.hexes).filter(k => { const d = hdist(k, u.at); if (d < 1 || d > range) return false; if (m === 'bridge') return V.hexes[k].t === 'water' && !V.hexes[k].bridge; if (m === 'merge') { const o = occupancy()[k]; return !!o && o.seat === V.me && o.type === u.type && o.id !== u.id && o.str < 10; } return true; });
   modeData = { u, targets: new Set(targets) };
-  setStatus(m === 'support' ? 'Tap the hex this unit will support.' : m === 'bombard' ? 'Tap the hex to shell.' : 'Tap the river hex to bridge.');
+  setStatus(m === 'support' ? 'Tap the hex this unit will support.' : m === 'bombard' ? 'Tap the hex to shell.' : m === 'merge' ? 'Tap the unit to join. This unit stays put and its men go to that one, up to 10. It must still be next to it at the end of the month.' : 'Tap the river hex to bridge.');
 }
 function cancelMode() { mode = null; modeData = null; setStatus(''); }
 function finishMode(k) {
   const m = mode, u = modeData.u; if (!modeData.targets.has(k)) { cancelMode(); return; }
   cancelMode();
   if (m === 'support') { chooseSupportFor(u, k); return; }
+  if (m === 'merge') { orders.units[u.id] = { k: 'merge', into: occupancy()[k].id }; changed(); select(null); return; }
   orders.units[u.id] = { k: m, hex: k }; changed(); select(null);
 }
 function chooseSupportFor(u, k) {
@@ -1179,15 +1208,24 @@ function renderUnitPanel() {
   if (u.type === 'art') b('Bombard…', () => startMode('bombard'), o && o.k === 'bombard');
   if (u.type === 'cav') b('Raid', () => setOrder('raid'), o && o.k === 'raid');
   if (u.type === 'eng') { b('Dig in', () => setOrder('dig'), o && o.k === 'dig'); if (h.town && h.town.owner === V.me) b('Fortify (2 supply)', () => setOrder('fortify'), o && o.k === 'fortify'); b('Bridge… (3)', () => startMode('bridge'), o && o.k === 'bridge'); if (h.railBroken || nbrs(u.at).some(x => V.hexes[x] && V.hexes[x].railBroken)) b('Repair rail', () => setOrder('repair'), o && o.k === 'repair'); }
+  const partner = u.type !== 'gen' && u.str < 10 && nbrs(u.at).some(x => { const v = occupancy()[x]; return v && v.seat === V.me && v.type === u.type && v.str < 10; });
+  if (partner) b('Merge…', () => startMode('merge'), o && o.k === 'merge');
   if (o) b('Clear order', () => setOrder('clear'));
   b('Close', () => select(null));
   p.append(row);
+  // leaving a detachment behind on the march
+  if (o && o.k === 'move' && u.type !== 'gen' && u.str >= 2) {
+    const room = armySize() < capOf() || o.detach;
+    const drow = el('div', { class: 'row wrap', style: 'margin-top:6px' }, el('span', { class: 'small' }, 'Leave behind:'));
+    for (let n = 0; n <= Math.min(5, u.str - 1); n++) drow.append(el('button', { class: (o.detach || 0) === n ? 'on' : '', disabled: n && !room ? 'disabled' : null, onclick: () => { if (n) o.detach = n; else delete o.detach; changed(); renderUnitPanel(); } }, n ? String(n) : 'None'));
+    p.append(drow, el('div', { class: 'small hint' }, room ? 'Those men stay in this hex as a new unit and hold it; the rest march on.' : 'Your army is at its limit, so there is no room for a detachment.'));
+  } else if (u.type !== 'gen' && u.str >= 2 && h.town && h.town.owner === V.me && (!o || o.k !== 'move')) p.append(el('div', { class: 'small hint' }, 'To leave a garrison here, give this unit a march, then tap it again to choose how many stay behind.'));
 }
 function openRecruit(k) {
   const p = $('#recruit'), h = V.hexes[k], me = V.seats[V.me]; p.innerHTML = ''; p.style.display = 'block';
   const queued = orders.recruit.find(r => r.hex === k);
   const spent = orders.recruit.reduce((t, r) => ({ men: t.men + E.UNIT[r.type].men, sup: t.sup + E.UNIT[r.type].sup }), { men: 0, sup: 0 });
-  const units = Object.values(V.units).filter(u => u.seat === V.me && u.type !== 'gen').length + orders.recruit.filter(r => r.type !== 'gen').length;
+  const units = armySize();
   const cap = capOf(); const hasGen = Object.values(V.units).some(u => u.seat === V.me && u.type === 'gen') || orders.recruit.some(r => r.type === 'gen');
   p.append(el('div', { class: 'uhead' }, el('b', {}, h.town.name), ` · ${E.KIND[h.town.kind].name} · raise a new unit`), el('div', { class: 'small' }, `You have ${me.men - spent.men} recruits and ${me.sup - spent.sup} supply after other orders · army ${units}/${cap}`));
   const row = el('div', { class: 'row wrap' });
@@ -1203,6 +1241,44 @@ function openRecruit(k) {
   p.append(row);
 }
 function closeRecruit() { const p = $('#recruit'); if (p) { p.style.display = 'none'; p.innerHTML = ''; } }
+/* ---------------- will the army eat? (a forecast of this month's supply, from the orders as written) ---------------- */
+let hungerSet = new Set();
+function supplyCheck() {
+  const me = V.seats[V.me]; if (!me || me.sup === undefined || V.over) return null;
+  const inc = E.incomeOf(V, V.me), occ = occupancy(), fronts = V.weather.fronts;
+  let works = 0, upChange = 0; const hungry = [];
+  const gifts = ((orders.diplo && orders.diplo.gift) || []).reduce((t, g) => t + (g.sup || 0), 0);
+  const recruits = orders.recruit.reduce((t, r) => t + E.UNIT[r.type].sup, 0);
+  for (const u of Object.values(V.units)) {
+    if (u.seat !== V.me) continue; const o = orders.units[u.id];
+    if (o && o.k === 'fortify') { const h = V.hexes[u.at]; if (h.town && h.town.owner === V.me && h.town.fort < 3) works += 2; }
+    if (o && o.k === 'bridge') works += 3;
+    if (o && o.k === 'merge') { upChange -= E.UNIT[u.type].up; continue; }
+    let end = u.at;
+    if (o && o.k === 'move') { const p = o.path; end = p[p.length - 1]; if (occ[end] && occ[end].seat !== V.me) end = p.length > 1 ? p[p.length - 2] : u.at; }
+    const snow = E.weatherAt(fronts, end) === 'snow';
+    if (!E.inSupplyAt(V, V.me, end)) hungry.push({ u, end, loss: snow ? 2 : 1 });
+    if (o && o.k === 'move' && o.detach) { upChange += E.UNIT[u.type].up; if (!E.inSupplyAt(V, V.me, u.at)) hungry.push({ u, end: u.at, loss: E.weatherAt(fronts, u.at) === 'snow' ? 2 : 1, detachment: true }); }
+  }
+  const up = inc.up + upChange;
+  const afterUpkeep = me.sup - gifts - works + inc.sup - up;
+  return { inc, up, gifts, works, recruits, afterUpkeep, afterRecruits: afterUpkeep - recruits, hungry };
+}
+function supplyBox(full) {
+  const c = supplyCheck(); hungerSet = new Set(c ? c.hungry.filter(h => !h.detachment).map(h => h.u.id) : []);
+  if (!c) return null;
+  const starving = c.afterUpkeep < 0, short = !starving && c.afterRecruits < 0;
+  if (!full && !starving && !short && !c.hungry.length) return null;
+  const box = el('div', { class: 'warnbox' + (starving || c.hungry.length ? ' bad' : '') });
+  box.append(el('div', {}, el('b', {}, 'Supply this month: '), `+${c.inc.sup} income − ${c.up} upkeep${c.works ? ` − ${c.works} works` : ''}${c.gifts ? ` − ${c.gifts} gifts` : ''} → ${c.afterUpkeep} in hand${c.recruits ? `, ${c.afterRecruits} after recruits` : ''}.`));
+  if (starving) box.append(el('div', {}, '⚠ Not enough to feed the army: every unit will lose 1 strength. Order fewer works or gifts, merge units, or take a town.'));
+  else if (short) box.append(el('div', {}, '⚠ Not enough left for every recruit you have ordered: some will not be raised.'));
+  for (const h of c.hungry) box.append(el('div', { class: 'oline', onclick: () => { select(h.u); centerOn(h.u.at); } }, `⚠ ${h.detachment ? 'The detachment left by ' : ''}${E.UNIT[h.u.type].name} (${h.u.str}) ${h.end === h.u.at ? (V.hexes[h.end].town ? 'at ' : '') : 'marching to '}${hexLabel(h.end)} will be out of supply: −${h.loss}${h.loss > 1 ? ' in the snow' : ''}.`));
+  if (c.hungry.length) box.append(el('div', { class: 'small' }, 'In supply means within 4 hexes of a town you hold, or on unbroken railway back to one. Units marked ! on the map.'));
+  if (full) box.append(el('div', { class: 'small' }, 'Worked out from your orders and the towns you hold now; a town taken or lost this month changes it.'));
+  return box;
+}
+function armySize() { return Object.values(V.units).filter(u => u.seat === V.me && u.type !== 'gen').length + orders.recruit.filter(r => r.type !== 'gen').length + Object.entries(orders.units).filter(([id, o]) => V.units[id] && o.k === 'move' && o.detach).length; }
 function capOf() { let c = 4; for (const k in V.hexes) { const t = V.hexes[k].town; if (t && t.owner === V.me) c += E.KIND[t.kind].cap; } return c; }
 function describeHex(k) {
   const h = V.hexes[k], w = E.weatherAt(V.weather.fronts, k), u = occupancy()[k];
@@ -1252,8 +1328,9 @@ function renderSide() {
     const mine = Object.values(V.units).filter(u => u.seat === V.me);
     const n = Object.keys(orders.units).filter(id => V.units[id]).length;
     body.append(el('p', { class: 'small' }, `${n} of ${mine.length} units have orders; the rest hold their ground (infantry holding in the open dig a shallow trench). ${orders.recruit.length ? orders.recruit.length + ' new unit' + (orders.recruit.length > 1 ? 's' : '') + ' ordered.' : 'Tap one of your towns to raise troops.'}`));
+    const sb = supplyBox(true); if (sb) body.append(sb);
     const list = el('div', { class: 'olist' });
-    for (const u of mine.sort((a, b) => a.type.localeCompare(b.type))) { const o = orders.units[u.id]; list.append(el('div', { class: 'oline', onclick: () => { select(u); centerOn(u.at); } }, el('span', { class: 'sw', style: `--c:${E.COLORS[V.me].ui}` }), `${E.UNIT[u.type].name} (${u.str}) ${V.hexes[u.at].town ? 'at ' : ''}${hexLabel(u.at)}: `, el('i', {}, describeOrder(o)))); }
+    for (const u of mine.sort((a, b) => a.type.localeCompare(b.type))) { const o = orders.units[u.id]; list.append(el('div', { class: 'oline', onclick: () => { select(u); centerOn(u.at); } }, el('span', { class: 'sw', style: `--c:${E.COLORS[V.me].ui}` }), `${E.UNIT[u.type].name} (${u.str}) ${V.hexes[u.at].town ? 'at ' : ''}${hexLabel(u.at)}: `, el('i', {}, describeOrder(o)), hungerSet.has(u.id) ? el('b', { class: 'hungry' }, ' · out of supply') : '')); }
     body.append(list);
     if (!V.over) body.append(el('div', { class: 'submit' },
       el('button', { class: 'primary', onclick: submit }, V.deadline ? (V.myOrders && !dirty ? 'Orders sent ✓ — send again' : 'Send my orders') : 'Fight the month'),
@@ -1287,6 +1364,7 @@ function renderSide() {
     const nextEra = Math.min(3, Math.floor((V.turn - 1) / V.eraTurns) + 1); if (nextEra > Math.floor((V.turn - 1) / V.eraTurns)) body.append(el('p', { class: 'small' }, `Coming in ${E.ERAS[nextEra].year} (turn ${nextEra * V.eraTurns + 1}): ${E.ERAS[nextEra].name}. ${E.ERAS[nextEra].text} Whoever holds the Capital's foundry gets each improvement early.`));
   }
   if (tab === 'news') {
+    const sb = supplyBox(false); if (sb) body.append(el('h4', {}, 'Before you send orders'), sb);
     body.append(el('button', { onclick: startReplay, disabled: (V.events || []).length ? null : 'disabled' }, '▶ Replay last month'));
     const byTurn = {}; for (const l of V.log || []) (byTurn[l.turn] = byTurn[l.turn] || []).push(l.text);
     for (const t of Object.keys(byTurn).sort((a, b) => b - a).slice(0, 8)) body.append(el('h4', {}, +t === 0 ? 'The outbreak' : E.dateOf(V, +t).label), el('ul', { class: 'news' }, ...byTurn[t].map(x => el('li', {}, x))));
@@ -1301,8 +1379,10 @@ const RULES = `
 <p><b>Recruits and supply.</b> Towns give recruits and supply; farms and railways add supply. Every unit eats supply each month. Units more than four hexes from your towns, and off your railways, are out of supply and lose men — twice as fast in snow. Units in supply that did not fight regain strength each month (1 supply in a town, 2 in the field). Your army can be no larger than your towns allow: 4, plus 1 per town, 4 for headquarters and 3 for the Capital.</p>
 <p><b>Weather</b> drifts across the map in fronts. Rain makes mud, floods fords and keeps guns to the roads. Fog blinds scouts and artillery. Heat wears out long marches. The forecast for next month is usually right; the one after is often wrong.</p>
 <p><b>Diplomacy.</b> Share your scouts' reports, grant free passage, or send recruits and supply to another army. Any of it can be withdrawn next month.</p>
-<p><b>Cavalry</b> raid railways and farms. <b>Engineers</b> dig earthworks, fortify towns, bridge rivers and mend railways. A <b>general</b> makes the units around him fight 15% better.</p>`;
-function describeOrder(o) { if (!o) return 'hold'; if (o.k === 'move') { const last = o.path[o.path.length - 1], occ = occupancy()[last], where = hexLabel(last), town = !!V.hexes[last].town; return occ && occ.seat !== V.me ? `attack ${town ? '' : 'the enemy '}${where}` : town ? `march to ${where}` : `march ${where}`; } if (o.k === 'support') return `support ${o.for === V.me ? 'my army' : seatName(o.for)} ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bombard') return `shell the enemy ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bridge') return 'build a bridge'; return { hold: 'hold', raid: 'raid', dig: 'dig earthworks', fortify: 'fortify the town', repair: 'repair the railway' }[o.k] || o.k; }
+<p><b>Cavalry</b> raid railways and farms. <b>Engineers</b> dig earthworks, fortify towns, bridge rivers and mend railways. A <b>general</b> makes the units around him fight 15% better.</p>
+<p><b>Merging and garrisons.</b> Two weak units of the same kind standing side by side can merge: tap one, press Merge…, then tap the other (up to strength 10). To leave a garrison, give a unit a march, tap it again and choose how many men stay behind.</p>
+<p><b>Hunger.</b> The Orders tab warns before you send orders if your supply will not cover upkeep, or if a unit will end the month out of supply (marked ! on the map).</p>`;
+function describeOrder(o) { if (!o) return 'hold'; if (o.k === 'merge') { const t = V.units[o.into]; return t ? `merge into the ${E.UNIT[t.type].name.toLowerCase()} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)} (${t.str})` : 'merge'; } if (o.k === 'move' && o.detach) return describeOrder({ k: 'move', path: o.path }) + `, leaving ${o.detach} behind`; if (o.k === 'move') { const last = o.path[o.path.length - 1], occ = occupancy()[last], where = hexLabel(last), town = !!V.hexes[last].town; return occ && occ.seat !== V.me ? `attack ${town ? '' : 'the enemy '}${where}` : town ? `march to ${where}` : `march ${where}`; } if (o.k === 'support') return `support ${o.for === V.me ? 'my army' : seatName(o.for)} ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bombard') return `shell the enemy ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bridge') return 'build a bridge'; return { hold: 'hold', raid: 'raid', dig: 'dig earthworks', fortify: 'fortify the town', repair: 'repair the railway' }[o.k] || o.k; }
 function hexLabel(k) { const h = V.hexes[k]; if (h.town) return h.town.name; let best = null, bd = 99; for (const x in V.hexes) if (V.hexes[x].town) { const d = hdist(x, k); if (d < bd) { bd = d; best = x; } } return `near ${V.hexes[best].town.name}`; }
 function centerOn(k) { const [x, y] = hexXY(k); view.x = x + HW / 2; view.y = y + HH / 2; }
 function renderOver() {
