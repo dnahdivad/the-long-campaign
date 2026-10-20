@@ -257,7 +257,8 @@ function bindInput() {
 }
 function setZoom(z, free) { view.z = Math.max(1, Math.min(6, free ? z : Math.round(z * 2) / 2)); clampView(); }
 function clampView() { view.x = Math.max(0, Math.min(MAPW, view.x)); view.y = Math.max(0, Math.min(MAPH, view.y)); }
-function resize() { const dpr = window.devicePixelRatio || 1; canvas.width = Math.round(canvas.clientWidth * dpr); canvas.height = Math.round(canvas.clientHeight * dpr); }
+// size the drawing surface from the box it sits in (never from itself), so it can never push the layout wider
+function resize() { const dpr = window.devicePixelRatio || 1, box = canvas.parentElement.getBoundingClientRect(); const w = Math.max(1, Math.min(8192, Math.round(box.width * dpr))), h = Math.max(1, Math.min(8192, Math.round(box.height * dpr))); if (canvas.width !== w) canvas.width = w; if (canvas.height !== h) canvas.height = h; }
 
 /* ---------------- orders ---------------- */
 function myUnit(k) { const u = occupancy()[k]; return u && u.seat === V.me ? u : null; }
@@ -552,7 +553,7 @@ async function poll() {
 async function boot(backend) {
   api = backend;
   canvas = $('#map'); ctx = canvas.getContext('2d');
-  resize(); window.addEventListener('resize', resize); bindInput();
+  resize(); window.addEventListener('resize', resize); if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas.parentElement); bindInput();
   let v;
   try { v = await api.load(); } catch (e) { document.body.innerHTML = `<div class="fatal"><h2>That campaign could not be found</h2><p>${esc(e.message)}</p></div>`; return; }
   if (!v.seats[v.me].joined) { await joinDialog(v); v = await api.load(); }
