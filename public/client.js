@@ -180,9 +180,9 @@ function drawOrder(g, u, o) {
     for (const k of o.path) { const [x, y] = hexXY(k), B = [x + HW / 2, y + HH / 2]; pline(g, prev[0], prev[1], B[0], B[1], '#17110a', 3); pline(g, prev[0], prev[1], B[0], B[1], occ[k] && occ[k].seat !== V.me ? '#ff6a4a' : '#ffe9a0', 1); prev = B; }
     g.fillStyle = '#ffe9a0'; g.fillRect(Math.round(prev[0] - 2), Math.round(prev[1] - 2), 4, 4);
     if (o.detach) { g.fillStyle = '#17110a'; g.fillRect(Math.round(A[0] - 9), Math.round(A[1] - 12), 6, 5); g.fillStyle = FLAGC(V.me); g.fillRect(Math.round(A[0] - 8), Math.round(A[1] - 11), 4, 3); }
-  } else if (o.k === 'support' || o.k === 'bombard' || o.k === 'bridge' || (o.k === 'merge' && V.units[o.into])) {
-    const tgt = o.k === 'merge' ? V.units[o.into].at : o.hex;
-    const [x, y] = hexXY(tgt), B = [x + HW / 2, y + HH / 2]; const col = o.k === 'support' ? FLAGC(o.for) : o.k === 'bombard' ? '#ff8a30' : o.k === 'merge' ? '#8fe08a' : '#9adcff';
+  } else if ((o.k === 'support' && (o.hex || V.units[o.unit])) || o.k === 'bombard' || o.k === 'bridge' || (o.k === 'merge' && V.units[o.into])) {
+    const tgt = o.k === 'merge' ? V.units[o.into].at : o.k === 'support' && o.unit ? V.units[o.unit].at : o.hex;
+    const [x, y] = hexXY(tgt), B = [x + HW / 2, y + HH / 2]; const col = o.k === 'support' ? FLAGC(o.unit ? V.units[o.unit].seat : o.for) : o.k === 'bombard' ? '#ff8a30' : o.k === 'merge' ? '#8fe08a' : '#9adcff';
     for (let i = 0; i < 1; i += 0.08) { const px = A[0] + (B[0] - A[0]) * i, py = A[1] + (B[1] - A[1]) * i - Math.sin(i * Math.PI) * 6; g.fillStyle = '#17110a'; g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); g.fillStyle = col; g.fillRect(Math.round(px), Math.round(py), 1, 1); }
   } else {
     const label = { hold: '', raid: '#c84a2a', dig: '#8a6038', fortify: '#8a8a8a', repair: '#5a8ac8' }[o.k]; if (label) { g.fillStyle = '#17110a'; g.fillRect(Math.round(A[0] + 5), Math.round(A[1] - 11), 5, 5); g.fillStyle = label; g.fillRect(Math.round(A[0] + 6), Math.round(A[1] - 10), 3, 3); }
@@ -280,15 +280,16 @@ function select(u) {
 }
 function startMode(m) {
   if (!sel) return; mode = m; const u = sel; const range = m === 'bombard' || (m === 'support' && u.type === 'art') ? 2 : 1;
-  const targets = Object.keys(V.hexes).filter(k => { const d = hdist(k, u.at); if (d < 1 || d > range) return false; if (m === 'bridge') return V.hexes[k].t === 'water' && !V.hexes[k].bridge; if (m === 'merge') { const o = occupancy()[k]; return !!o && o.seat === V.me && o.type === u.type && o.id !== u.id && o.str < 10; } return true; });
+  const targets = Object.keys(V.hexes).filter(k => { const d = hdist(k, u.at); if (d < 1 || d > range) return false; if (m === 'bridge') return V.hexes[k].t === 'water' && !V.hexes[k].bridge; if (m === 'support') { const o = occupancy()[k]; return !!o && o.id !== u.id && o.seat !== E.NEUTRAL; }
+    if (m === 'merge') { const o = occupancy()[k]; return !!o && o.seat === V.me && o.type === u.type && o.id !== u.id && o.str < 10; } return true; });
   modeData = { u, targets: new Set(targets) };
-  setStatus(m === 'support' ? 'Tap the hex this unit will support.' : m === 'bombard' ? 'Tap the hex to shell.' : m === 'merge' ? 'Tap the unit to join. This unit stays put and its men go to that one, up to 10. It must still be next to it at the end of the month.' : 'Tap the river hex to bridge.');
+  setStatus(m === 'support' ? 'Tap the unit to back. Yours: you add to its attack wherever it attacks, or to its defence if it is attacked. Another army\'s: the same, for them. Stay next to it (guns: within 2).' : m === 'bombard' ? 'Tap the hex to shell.' : m === 'merge' ? 'Tap the unit to join. This unit stays put and its men go to that one, up to 10. It must still be next to it at the end of the month.' : 'Tap the river hex to bridge.');
 }
 function cancelMode() { mode = null; modeData = null; setStatus(''); }
 function finishMode(k) {
   const m = mode, u = modeData.u; if (!modeData.targets.has(k)) { cancelMode(); return; }
   cancelMode();
-  if (m === 'support') { chooseSupportFor(u, k); return; }
+  if (m === 'support') { orders.units[u.id] = { k: 'support', unit: occupancy()[k].id }; changed(); select(null); return; }
   if (m === 'merge') { orders.units[u.id] = { k: 'merge', into: occupancy()[k].id }; changed(); select(null); return; }
   orders.units[u.id] = { k: m, hex: k }; changed(); select(null);
 }
@@ -446,7 +447,7 @@ function renderSide() {
     body.append(el('p', { class: 'small' }, `${n} of ${mine.length} units have orders; the rest hold their ground (infantry holding in the open dig a shallow trench). ${orders.recruit.length ? orders.recruit.length + ' new unit' + (orders.recruit.length > 1 ? 's' : '') + ' ordered.' : 'Tap one of your towns to raise troops.'}`));
     const sb = supplyBox(true); if (sb) body.append(sb);
     const list = el('div', { class: 'olist' });
-    for (const u of mine.sort((a, b) => a.type.localeCompare(b.type))) { const o = orders.units[u.id]; list.append(el('div', { class: 'oline', onclick: () => { select(u); centerOn(u.at); } }, el('span', { class: 'sw', style: `--c:${E.COLORS[V.me].ui}` }), `${E.UNIT[u.type].name} (${u.str}) ${V.hexes[u.at].town ? 'at ' : ''}${hexLabel(u.at)}: `, el('i', {}, describeOrder(o)), hungerSet.has(u.id) ? el('b', { class: 'hungry' }, ' · out of supply') : '')); }
+    for (const u of mine.sort((a, b) => a.type.localeCompare(b.type))) { const o = orders.units[u.id]; list.append(el('div', { class: 'oline', onclick: () => { select(u); centerOn(u.at); } }, el('span', { class: 'sw', style: `--c:${E.COLORS[V.me].ui}` }), `${E.UNIT[u.type].name} (${u.str}) ${V.hexes[u.at].town ? 'at ' : ''}${hexLabel(u.at)}: `, el('i', {}, describeOrder(o, u)), hungerSet.has(u.id) ? el('b', { class: 'hungry' }, ' · out of supply') : '')); }
     body.append(list);
     if (!V.over) body.append(el('div', { class: 'submit' },
       el('button', { class: 'primary', onclick: submit }, V.deadline ? (V.myOrders && !dirty ? 'Orders sent ✓ — send again' : 'Send my orders') : 'Fight the month'),
@@ -491,14 +492,27 @@ const RULES = `
 <p><b>Every month</b> all generals give orders in secret. When the turn resolves, everything happens at once: marches, then shelling, then battles.</p>
 <p><b>Marching.</b> Tap a unit, then a lit hex. Roads and railways are fast, woods and hills slow, rivers only cross at bridges and fords. Coming next to an enemy stops a march.</p>
 <p><b>Attacking.</b> March into a red hex. Attack and defence add up: <i>woods ×1.3, hills ×1.35, towns ×1.4, headquarters and the Capital ×1.6</i>, plus forts and earthworks. A big enough win drives the defenders back; a surrounded unit is badly hurt.</p>
-<p><b>Support.</b> A unit next to a hex (artillery up to two away) can support <i>any army's</i> attack into it, or defence of it. If the supporting unit is attacked itself, its support is cut. This is how alliances fight together — and how they betray each other.</p>
+<p><b>Support.</b> Tap Support…, then tap a unit next to yours (guns: within 2) — your own or another army's. You add to that unit's attack wherever it attacks, or to its defence if it is attacked, as long as you are still next to it when it fights. Being attacked yourself cancels your support. This is how alliances fight together — and how they break: back the defender instead of the ally who asked.</p>
 <p><b>Recruits and supply.</b> Towns give recruits and supply; farms and railways add supply. Every unit eats supply each month. Units more than four hexes from your towns, and off your railways, are out of supply and lose men — twice as fast in snow. Units in supply that did not fight regain strength each month (1 supply in a town, 2 in the field). Your army can be no larger than your towns allow: 4, plus 1 per town, 4 for headquarters and 3 for the Capital.</p>
 <p><b>Weather</b> drifts across the map in fronts. Rain makes mud, floods fords and keeps guns to the roads. Fog blinds scouts and artillery. Heat wears out long marches. The forecast for next month is usually right; the one after is often wrong.</p>
 <p><b>Diplomacy.</b> Share your scouts' reports, grant free passage, or send recruits and supply to another army. Any of it can be withdrawn next month.</p>
 <p><b>Cavalry</b> raid railways and farms. <b>Engineers</b> dig earthworks, fortify towns, bridge rivers and mend railways. A <b>general</b> makes the units around him fight 15% better.</p>
 <p><b>Merging and garrisons.</b> Two weak units of the same kind standing side by side can merge: tap one, press Merge…, then tap the other (up to strength 10). To leave a garrison, give a unit a march, tap it again and choose how many men stay behind.</p>
 <p><b>Hunger.</b> The Orders tab warns before you send orders if your supply will not cover upkeep, or if a unit will end the month out of supply (marked ! on the map).</p>`;
-function describeOrder(o) { if (!o) return 'hold'; if (o.k === 'merge') { const t = V.units[o.into]; return t ? `merge into the ${E.UNIT[t.type].name.toLowerCase()} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)} (${t.str})` : 'merge'; } if (o.k === 'move' && o.detach) return describeOrder({ k: 'move', path: o.path }) + `, leaving ${o.detach} behind`; if (o.k === 'move') { const last = o.path[o.path.length - 1], occ = occupancy()[last], where = hexLabel(last), town = !!V.hexes[last].town; return occ && occ.seat !== V.me ? `attack ${town ? '' : 'the enemy '}${where}` : town ? `march to ${where}` : `march ${where}`; } if (o.k === 'support') return `support ${o.for === V.me ? 'my army' : seatName(o.for)} ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bombard') return `shell the enemy ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bridge') return 'build a bridge'; return { hold: 'hold', raid: 'raid', dig: 'dig earthworks', fortify: 'fortify the town', repair: 'repair the railway' }[o.k] || o.k; }
+function supportPlan(u, o) {
+  const t = V.units[o.unit]; if (!t) return { text: 'back a unit you can no longer see' };
+  const range = u.type === 'art' ? 2 : 1, name = `${t.seat === V.me ? 'my' : seatName(t.seat) + '\'s'} ${E.UNIT[t.type].name.toLowerCase()}`;
+  const to = orders.units[t.id];
+  if (t.seat === V.me && to && to.k === 'move') {
+    const p = to.path, goal = p[p.length - 1], occ = occupancy(), attack = occ[goal] && occ[goal].seat !== V.me;
+    const fightsFrom = attack ? (p.length > 1 ? p[p.length - 2] : t.at) : goal;
+    if (!attack) return { text: `back ${name}, but it is marching, not attacking`, warn: 'only helps if it is attacked where it ends up' + (hdist(u.at, fightsFrom) > range ? ', and it will be too far away' : '') };
+    return { text: `add to ${name}'s attack on ${hexLabel(goal)}`, warn: hdist(u.at, fightsFrom) > range ? `too far: it attacks from ${hexLabel(fightsFrom)}, more than ${range} hex${range > 1 ? 'es' : ''} from here` : null };
+  }
+  if (t.seat === V.me) return { text: `back ${name} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)}`, warn: 'it has no attack ordered, so this only helps if it is attacked' };
+  return { text: `back ${name} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)} in any attack it makes, or its defence` };
+}
+function describeOrder(o, u) { if (!o) return 'hold'; if (o.k === 'support' && o.unit && u) { const s = supportPlan(u, o); return s.text + (s.warn ? ` — ⚠ ${s.warn}` : ''); } if (o.k === 'merge') { const t = V.units[o.into]; return t ? `merge into the ${E.UNIT[t.type].name.toLowerCase()} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)} (${t.str})` : 'merge'; } if (o.k === 'move' && o.detach) return describeOrder({ k: 'move', path: o.path }) + `, leaving ${o.detach} behind`; if (o.k === 'move') { const last = o.path[o.path.length - 1], occ = occupancy()[last], where = hexLabel(last), town = !!V.hexes[last].town; return occ && occ.seat !== V.me ? `attack ${town ? '' : 'the enemy '}${where}` : town ? `march to ${where}` : `march ${where}`; } if (o.k === 'support') return `support ${o.for === V.me ? 'my army' : seatName(o.for)} ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bombard') return `shell the enemy ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bridge') return 'build a bridge'; return { hold: 'hold', raid: 'raid', dig: 'dig earthworks', fortify: 'fortify the town', repair: 'repair the railway' }[o.k] || o.k; }
 function hexLabel(k) { const h = V.hexes[k]; if (h.town) return h.town.name; let best = null, bd = 99; for (const x in V.hexes) if (V.hexes[x].town) { const d = hdist(x, k); if (d < bd) { bd = d; best = x; } } return `near ${V.hexes[best].town.name}`; }
 function centerOn(k) { const [x, y] = hexXY(k); view.x = x + HW / 2; view.y = y + HH / 2; }
 function renderOver() {

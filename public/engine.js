@@ -378,7 +378,7 @@ E.inSupplyAt = function (state, seat, at) {
 };
 
 /* ---------------- orders ---------------- */
-// orders = { units: {id: {k:'move', path:[...]} | {k:'hold'} | {k:'support', hex, for} | {k:'bombard', hex} | {k:'raid'} | {k:'dig'} | {k:'fortify'} | {k:'bridge', hex} | {k:'repair'} | {k:'merge', into} }, a move may carry detach: n, recruit: [{hex, type}], diplo: {sight:[], passage:[], gift: [{to, men, sup}]} }
+// orders = { units: {id: {k:'move', path:[...]} | {k:'hold'} | {k:'support', unit} (back that unit: add to its attack, or to its defence) | {k:'support', hex, for} (older form: a battle in a hex) | {k:'bombard', hex} | {k:'raid'} | {k:'dig'} | {k:'fortify'} | {k:'bridge', hex} | {k:'repair'} | {k:'merge', into} }, a move may carry detach: n, recruit: [{hex, type}], diplo: {sight:[], passage:[], gift: [{to, men, sup}]} }
 E.cleanOrders = function (state, seat, o) {
   const out = { units: {}, recruit: [], diplo: { sight: state.rel.sight[seat].slice(), passage: state.rel.passage[seat].slice(), gift: [] } };
   if (!o || typeof o !== 'object') return out;
@@ -390,7 +390,8 @@ E.cleanOrders = function (state, seat, o) {
       let cur = u.at, cost = 0; const path = [];
       for (const x of ord.path.slice(0, 12)) { if (typeof x !== 'string' || !state.hexes[x] || hdist(cur, x) !== 1) break; const c = E.stepCost(state, u.type, cur, x, state.weather.fronts); if (!isFinite(c) || cost + c > UNIT[u.type].mp + 1e-9) break; cost += c; path.push(x); cur = x; }
       if (path.length) { out.units[id] = { k: 'move', path }; const det = ord.detach | 0; if (det >= 1 && det < u.str && u.type !== 'gen') detaches.push([id, det]); }
-    } else if (k === 'support' && state.hexes[ord.hex] && hdist(u.at, ord.hex) <= (u.type === 'art' ? 2 : 1) && hdist(u.at, ord.hex) >= 1 && Number.isInteger(ord.for) && ord.for >= 0 && ord.for < state.n) out.units[id] = { k: 'support', hex: ord.hex, for: ord.for };
+    } else if (k === 'support' && typeof ord.unit === 'string') { const t = state.units[ord.unit]; if (t && t !== u && t.seat !== NEUTRAL && hdist(t.at, u.at) <= (u.type === 'art' ? 2 : 1)) out.units[id] = { k: 'support', unit: t.id }; }
+    else if (k === 'support' && state.hexes[ord.hex] && hdist(u.at, ord.hex) <= (u.type === 'art' ? 2 : 1) && hdist(u.at, ord.hex) >= 1 && Number.isInteger(ord.for) && ord.for >= 0 && ord.for < state.n) out.units[id] = { k: 'support', hex: ord.hex, for: ord.for };
     else if (k === 'bombard' && u.type === 'art' && state.hexes[ord.hex] && hdist(u.at, ord.hex) >= 1 && hdist(u.at, ord.hex) <= 2) out.units[id] = { k: 'bombard', hex: ord.hex };
     else if (k === 'raid' && u.type === 'cav') out.units[id] = { k: 'raid' };
     else if ((k === 'dig' || k === 'fortify' || k === 'repair') && u.type === 'eng') out.units[id] = { k };
@@ -544,7 +545,11 @@ E.resolve = function (state, ordersBySeat) {
   }
   const attackedHexes = new Set(Object.keys(attacks));
   const supports = [];
-  for (const id in state.units) { const u = state.units[id], o = unitOrder(id); if (o.k === 'support' && u.str > 0 && hdist(u.at, o.hex) <= (u.type === 'art' ? 2 : 1)) supports.push({ id, hex: o.hex, for: o.for, cut: attackedHexes.has(u.at) && !(attacks[u.at] || []).some(a => state.units[a].at === o.hex) }); }
+  for (const id in state.units) {
+    const u = state.units[id], o = unitOrder(id); if (o.k !== 'support' || u.str <= 0) continue;
+    if (o.unit) supports.push({ id, unit: o.unit, cut: attackedHexes.has(u.at) });
+    else if (hdist(u.at, o.hex) <= (u.type === 'art' ? 2 : 1)) supports.push({ id, hex: o.hex, for: o.for, cut: attackedHexes.has(u.at) && !(attacks[u.at] || []).some(a => state.units[a].at === o.hex) });
+  }
   for (const s of supports) if (s.cut) ev.push({ k: 'note', hex: state.units[s.id].at, text: `${uname(state, state.units[s.id])} is attacked and cannot give its support.`, seat: state.units[s.id].seat });
   const fought = new Set();
   const battleOrder = shuffle(Object.keys(attacks), R);
@@ -561,7 +566,15 @@ E.resolve = function (state, ordersBySeat) {
       for (const a of atts) { const cross = H[a.at].t === 'water' || H[hx].t === 'water' ? 0.75 : 1; const vsArt = a.type === 'cav' && (d.type === 'art' || d.str < 4) ? 1.4 : 1; A += power(state, a, 'att', hx, cross * vsArt); }
       let D = power(state, d, 'def', hx);
       const sa = [], sd = [];
-      for (const s of supports) { if (s.cut || s.hex !== hx) continue; const su = state.units[s.id]; if (!su || su.str <= 0) continue; if (s.for === +aseat && su.seat !== d.seat) { A += supportPower(state, su, 'att'); sa.push(s.id); } else if (s.for === d.seat && su.seat !== +aseat) { D += supportPower(state, su, 'def'); sd.push(s.id); } }
+      for (const s of supports) {
+        if (s.cut) continue; const su = state.units[s.id]; if (!su || su.str <= 0) continue;
+        if (s.unit) { // backing a unit: it must be close enough where that unit fights
+          const tu = state.units[s.unit]; if (!tu) continue; const near = hdist(su.at, tu.at) <= (su.type === 'art' ? 2 : 1);
+          if (atts.includes(tu) && su.seat !== d.seat) { if (near) { A += supportPower(state, su, 'att'); sa.push(s.id); } else ev.push({ k: 'note', hex: su.at, seat: su.seat, text: `${uname(state, su)} is too far from the attack it was to back.` }); }
+          else if (tu === d && su.seat !== +aseat) { if (near) { D += supportPower(state, su, 'def'); sd.push(s.id); } }
+          continue;
+        }
+        if (s.hex !== hx) continue; if (s.for === +aseat && su.seat !== d.seat) { A += supportPower(state, su, 'att'); sa.push(s.id); } else if (s.for === d.seat && su.seat !== +aseat) { D += supportPower(state, su, 'def'); sd.push(s.id); } }
       const r = A / Math.max(0.1, D);
       const dmgD = Math.max(0, Math.round(clamp(3 * r, 0.5, 8) * (0.8 + R() * 0.4)));
       const dmgA = Math.max(0, Math.round(clamp(2.4 / r, 0, 7) * (0.8 + R() * 0.4)));
@@ -736,7 +749,7 @@ E.botOrders = function (state, seat) {
   const g = units.find(u => u.type === 'gen');
   if (g) { const others = units.filter(u => u.type !== 'gen'); if (others.length) { const c = others.sort((a, b) => hdist(a.at, g.at) - hdist(b.at, g.at))[Math.floor(others.length / 2)]; const rc = E.reach(state, g, occ, fronts, R); const dest = nearestReach(rc, c.at, true); const p = dest && E.pathTo(rc, g.at, dest); if (p && p.length) out.units[g.id] = { k: 'move', path: p }; } }
   // supports: idle units next to an attacked hex help
-  for (const u of units) { if (out.units[u.id] && out.units[u.id].k !== 'hold') continue; const atk = Object.values(out.units).find(o => o.k === 'move' && o.path.length === 1 && hdist(o.path[0], u.at) === 1 && occ[o.path[0]] && occ[o.path[0]].seat !== seat); if (atk) out.units[u.id] = { k: 'support', hex: atk.path[0], for: seat }; }
+  for (const u of units) { if (out.units[u.id] && out.units[u.id].k !== 'hold') continue; const atk = Object.entries(out.units).find(([aid, o]) => aid !== u.id && o.k === 'move' && o.path.length === 1 && occ[o.path[0]] && occ[o.path[0]].seat !== seat && hdist(state.units[aid].at, u.at) <= (u.type === 'art' ? 2 : 1)); if (atk) out.units[u.id] = { k: 'support', unit: atk[0] }; }
   // recruitment
   const count = units.filter(u => u.type !== 'gen').length, cap = E.unitCap(state, seat);
   let men = s.men, sup = s.sup, n = count;
