@@ -74,6 +74,9 @@ const GOALS = {
   army: { text: 'Field the largest army at the end of the war.', vp: 3 },
   far: { text: 'Hold a town on the far side of the map at the end.', vp: 3 }
 };
+const TOWER = { cost: 3, max: 4, sight: 3, fogSight: 2, woodsSpot: 2 };
+const DEAL = { fee: 1, maxMonths: 6, maxOffers: 3 };
+E.TOWER = TOWER; E.DEAL = DEAL;
 E.UNIT = UNIT; E.TER = TER; E.KIND = KIND; E.COLORS = COLORS; E.NEUTRAL = NEUTRAL; E.WEATHER = WEATHER; E.ERAS = ERAS; E.GOALS = GOALS; E.MONTHS = MONTHS; E.SEASON_OF = SEASON_OF;
 
 /* ---------------- symmetry groups for fair maps ---------------- */
@@ -94,41 +97,56 @@ const CAPITALS = ['Columbia', 'Fairhaven', 'Meridian', 'Concord', 'Providence', 
 const HQ_NAMES = ['Fort Ashby', 'Camp Douglas', 'Fort Hale', 'Camp Lee', 'Fort Mercer', 'Camp Brandt'];
 
 /* ---------------- map generation ---------------- */
-E.newGame = function (opts) {
-  const n = clamp(opts.seats | 0, 2, 6);
-  const seed = (opts.seed >>> 0) || ((Math.random() * 4294967295) >>> 0);
-  const R = rng(seed), rf = (a, b) => a + R() * (b - a), ri = (a, b) => Math.floor(rf(a, b + 1)), pick = a => a[Math.floor(R() * a.length)];
-  const size = opts.mapSize || 'normal';
-  const Rad = ({ 2: 10, 3: 11, 4: 12, 5: 14, 6: 14 }[n]) + (size === 'large' ? 3 : size === 'small' ? -2 : 0);
-  const G = groupFor(n), slots = n === 5 ? 6 : n;
-  const hexes = {};
-  for (let q = -Rad; q <= Rad; q++) for (let r = -Rad; r <= Rad; r++) if (Math.abs(q + r) <= Rad) hexes[K(q, r)] = { q, r, t: 'clear' };
-  const keys = Object.keys(hexes);
+// Two ways to lay out the board:
+//  'matched' (the default): every army's slice has the same ingredients (the same number of hills, woods, river,
+//    towns at the same distances, farms, a railway) but each is laid out differently, so your own corner tells
+//    you nothing about anyone else's. Many candidate maps are drawn and the fairest one is kept.
+//  'mirror': every slice is an exact copy of the first, turned to face the centre.
+const smoothField = list => k => { const [x, y] = toXY(...P(k)); let v = 0; for (const b of list) { const d = ((x - b.x) ** 2 + (y - b.y) ** 2) / (b.r * b.r); v += b.h * Math.exp(-d); } return v; };
+function boardHexes(Rad) { const hexes = {}; for (let q = -Rad; q <= Rad; q++) for (let r = -Rad; r <= Rad; r++) if (Math.abs(q + r) <= Rad) hexes[K(q, r)] = { q, r, t: 'clear' }; return hexes; }
+function astarOn(hexes, a, b) {
+  const pathCost = k => { const h = hexes[k]; return !h ? 99 : h.t === 'water' ? 6 : h.t === 'hills' ? 3 : h.t === 'woods' ? 2.5 : h.road ? 0.6 : 1; };
+  const open = [[0, a]], g = { [a]: 0 }, from = {};
+  while (open.length) {
+    open.sort((x, y) => x[0] - y[0]); const [, cur] = open.shift(); if (cur === b) break;
+    for (const nb of nbrs(cur)) { if (!hexes[nb]) continue; const ng = g[cur] + pathCost(nb); if (g[nb] === undefined || ng < g[nb]) { g[nb] = ng; from[nb] = cur; open.push([ng + hdist(nb, b), nb]); } }
+  }
+  const out = []; let c = b; while (c && c !== a) { out.push(c); c = from[c]; } out.push(a); return out.reverse();
+}
+// marching cost (infantry, fair weather, no troops in the way) from one hex to every other
+function marchCosts(hexes, from) {
+  const st = { hexes }, best = { [from]: 0 }, open = [from];
+  while (open.length) {
+    let bi = 0; for (let i = 1; i < open.length; i++) if (best[open[i]] < best[open[bi]]) bi = i;
+    const cur = open.splice(bi, 1)[0];
+    for (const nb of nbrs(cur)) { if (!hexes[nb]) continue; const c = E.stepCost(st, 'inf', cur, nb, []); if (!isFinite(c)) continue; const g = best[cur] + c; if (best[nb] === undefined || g < best[nb]) { best[nb] = g; open.push(nb); } }
+  }
+  return best;
+}
+function bridgeToCapital(hexes, hqAll, center, orbit) {
+  for (const hq of hqAll) {
+    const seen = new Set([hq]), q = [hq];
+    while (q.length) { const c = q.shift(); for (const nb of nbrs(c)) { const h = hexes[nb]; if (!h || seen.has(nb) || (h.t === 'water' && !h.bridge && !h.ford)) continue; seen.add(nb); q.push(nb); } }
+    if (!seen.has(center)) for (const k of astarOn(hexes, hq, center)) for (const o of (orbit ? orbit(k) : [k])) if (hexes[o] && hexes[o].t === 'water') hexes[o].bridge = true;
+  }
+}
+
+function mirrorMap(c, R) {
+  const { n, Rad, G, hqAll, center, density, opts } = c;
+  const rf = (a, b) => a + R() * (b - a), ri = (a, b) => Math.floor(rf(a, b + 1)), pick = a => a[Math.floor(R() * a.length)];
+  const hexes = boardHexes(Rad), keys = Object.keys(hexes), garrison = {};
   const orbit = k => { const p = P(k), s = new Set(); for (const g of G) { const [a, b] = g(p); s.add(K(a, b)); } return [...s]; };
-  // smooth noise from random bumps, averaged over each orbit so the board is symmetric
   const bumps = (count, rad) => Array.from({ length: count }, () => ({ x: rf(-1.7, 1.7) * Rad, y: rf(-1.5, 1.5) * Rad, r: rf(0.6, 1.4) * rad, h: rf(0.5, 1) }));
-  const field = list => k => { const [x, y] = toXY(...P(k)); let v = 0; for (const b of list) { const d = ((x - b.x) ** 2 + (y - b.y) ** 2) / (b.r * b.r); v += b.h * Math.exp(-d); } return v; };
   const symField = f => { const out = {}; for (const k of keys) { if (out[k] !== undefined) continue; const o = orbit(k).filter(x => hexes[x]); const v = Math.max(...o.map(f)); for (const x of o) out[x] = v; } return out; };
-  const density = { light: 0.7, normal: 1, heavy: 1.35 }[opts.terrain || 'normal'];
   const nb = Math.max(2, Math.round(Rad * 0.45 / Math.max(1, G.length / 2)));
-  const hill = symField(field(bumps(Math.round(nb * 0.8), 3.6)));
-  const wood = symField(field(bumps(Math.round(nb * 1.3 * density), 4.2)));
+  const hill = symField(smoothField(bumps(Math.round(nb * 0.8), 3.6)));
+  const wood = symField(smoothField(bumps(Math.round(nb * 1.3 * density), 4.2)));
   const thr = (fld, frac) => { const v = keys.map(k => fld[k]).sort((a, b) => b - a); return v[Math.floor(v.length * frac)]; };
   const hT = thr(hill, 0.12 * Math.sqrt(density)), wT = thr(wood, 0.22 * density);
-  for (const k of keys) {
-    if (hill[k] > hT && hdist(k, '0,0') > 1) hexes[k].t = 'hills';
-    else if (wood[k] > wT) hexes[k].t = 'woods';
-  }
-  // seats: headquarters placed by symmetry
-  const ang = seatAngle(n) * Math.PI / 180, dist0 = Rad * 0.74;
-  const h0 = fromXY(Math.cos(ang) * dist0 * Math.sqrt(3), Math.sin(ang) * dist0 * 1.5);
-  const hqAll = G.map(g => K(...g(h0)));
-  const center = K(0, 0);
+  for (const k of keys) { if (hill[k] > hT && hdist(k, '0,0') > 1) hexes[k].t = 'hills'; else if (wood[k] > wT) hexes[k].t = 'woods'; }
   const protect = new Set([center, ...hqAll]);
   for (const h of hqAll) for (const x of nbrs(h)) protect.add(x);
-  // rivers: random walks from near the centre to the edge, copied around the board
-  const rivers = new Set();
-  const nRiv = opts.rivers === undefined ? 1 : opts.rivers;
+  const rivers = new Set(), nRiv = opts.rivers === undefined ? 1 : opts.rivers;
   for (let i = 0; i < nRiv; i++) {
     let cur = K(...fromXY(rf(-0.3, 0.3) * Rad, rf(-0.3, 0.3) * Rad)), dir = ri(0, 5), steps = 0;
     while (hexes[cur] && steps++ < Rad * 1.4) {
@@ -138,13 +156,10 @@ E.newGame = function (opts) {
     }
   }
   for (const k of [...rivers]) for (const o of orbit(k)) if (hexes[o] && !protect.has(o)) hexes[o].t = 'water';
-  // towns: the capital at the centre, headquarters, then neutral towns placed one orbit at a time
-  const towns = [];
-  const usedNames = new Set(), tname = () => { let s; do s = pick(TOWNS); while (usedNames.has(s)); usedNames.add(s); return s; };
+  const towns = [], usedNames = new Set(), tname = () => { let s; do s = pick(TOWNS); while (usedNames.has(s)); usedNames.add(s); return s; };
   const setTown = (k, kind, name, owner) => { const h = hexes[k]; h.t = 'town'; h.town = { name, kind, owner, fort: kind === 'town' ? 0 : 1 }; towns.push(k); };
   setTown(center, 'city', pick(CAPITALS), NEUTRAL);
-  const seatOf = {};
-  hqAll.forEach((k, i) => { setTown(k, 'hq', HQ_NAMES[i], i < n || n !== 5 ? (i < n ? i : NEUTRAL) : NEUTRAL); seatOf[k] = i; });
+  hqAll.forEach((k, i) => setTown(k, 'hq', HQ_NAMES[i], i < n ? i : NEUTRAL));
   if (n === 5) { const k = hqAll[5]; hexes[k].town.kind = 'town'; hexes[k].town.name = tname(); hexes[k].town.fort = 1; }
   const perSeat = Math.round(Rad * 0.55 * (opts.towns === 'many' ? 1.4 : opts.towns === 'few' ? 0.7 : 1));
   let tries = 0, placed = 0;
@@ -153,80 +168,245 @@ E.newGame = function (opts) {
     const o = orbit(k).filter(x => hexes[x]);
     if (o.some(x => hexes[x].t === 'water' || towns.some(t => hdist(t, x) < 3))) continue;
     if (o.length > 1 && o.some((a, i) => o.some((b, j) => i < j && hdist(a, b) < 3))) continue;
-    for (const x of o) { setTown(x, 'town', tname(), NEUTRAL); placed++; }
+    const str = 4 + Math.floor(R() * 2);
+    for (const x of o) { setTown(x, 'town', tname(), NEUTRAL); garrison[x] = str; placed++; }
   }
-  // farms beside towns
-  for (const t of towns) {
-    if (seatOf[t] === undefined && hexes[t].town.kind !== 'town') continue;
-  }
-  const farmBase = new Set();
-  const doneT = new Set();
+  const farmBase = new Set(), doneT = new Set();
   for (const t of towns) { if (doneT.has(t)) continue; for (const o of orbit(t)) doneT.add(o); const cand = nbrs(t).filter(x => hexes[x] && hexes[x].t === 'clear' && !hexes[x].town); for (let i = 0; i < (hexes[t].town.kind === 'town' ? 1 : 2) && cand.length; i++) farmBase.add(cand.splice(Math.floor(R() * cand.length), 1)[0]); }
   for (const k of keys) if (hexes[k].t === 'clear' && R() < 0.04 / G.length * 2) farmBase.add(k);
   for (const k of [...farmBase]) for (const o of orbit(k)) if (hexes[o] && hexes[o].t === 'clear' && !hexes[o].town) hexes[o].farm = { town: null, burned: 0 };
   for (const k of keys) if (hexes[k].farm) {
-    // a farm belongs to its nearest town; a farm equally near two towns would favour one army, so it is left wild
     const ds = towns.map(t => hdist(k, t)), m = Math.min(...ds);
     if (ds.filter(d => d === m).length > 1) { for (const o of orbit(k)) if (hexes[o]) delete hexes[o].farm; continue; }
     hexes[k].farm.town = towns[ds.indexOf(m)];
   }
-  // roads and railways: shortest paths, then copied around the board for symmetry
-  const pathCost = k => { const h = hexes[k]; return !h ? 99 : h.t === 'water' ? 6 : h.t === 'hills' ? 3 : h.t === 'woods' ? 2.5 : h.road ? 0.6 : 1; };
-  const astar = (a, b) => {
-    const open = [[0, a]], g = { [a]: 0 }, from = {};
-    while (open.length) {
-      open.sort((x, y) => x[0] - y[0]); const [, cur] = open.shift(); if (cur === b) break;
-      for (const nb of nbrs(cur)) { if (!hexes[nb]) continue; const ng = g[cur] + pathCost(nb); if (g[nb] === undefined || ng < g[nb]) { g[nb] = ng; from[nb] = cur; open.push([ng + hdist(nb, b), nb]); } }
-    }
-    const out = []; let c = b; while (c && c !== a) { out.push(c); c = from[c]; } out.push(a); return out.reverse();
-  };
   const mark = (path, f) => { for (const k of path) for (const o of orbit(k)) if (hexes[o]) hexes[o][f] = true; };
-  const neutral = towns.filter(t => hexes[t].town.kind === 'town');
-  for (const t of neutral) { const near = towns.filter(x => x !== t).sort((a, b) => hdist(a, t) - hdist(b, t)).slice(0, 2); for (const x of near) mark(astar(t, x), 'road'); }
-  mark(astar(hqAll[0], center), 'rail');
+  for (const t of towns.filter(t => hexes[t].town.kind === 'town')) { const near = towns.filter(x => x !== t).sort((a, b) => hdist(a, t) - hdist(b, t)).slice(0, 2); for (const x of near) mark(astarOn(hexes, t, x), 'road'); }
+  mark(astarOn(hexes, hqAll[0], center), 'rail');
   for (const k of keys) { const h = hexes[k]; if (h.t === 'water' && (h.road || h.rail)) h.bridge = true; }
-  // fords on the rivers
   for (const k of keys) { const h = hexes[k]; if (h.t === 'water' && !h.bridge && R() < 0.12) for (const o of orbit(k)) if (hexes[o] && hexes[o].t === 'water' && !hexes[o].bridge) hexes[o].ford = true; }
-  // every headquarters must be able to reach the capital
-  for (const hq of hqAll) {
-    const seen = new Set([hq]), q = [hq];
-    while (q.length) { const c = q.shift(); for (const nb of nbrs(c)) { const h = hexes[nb]; if (!h || seen.has(nb) || (h.t === 'water' && !h.bridge && !h.ford)) continue; seen.add(nb); q.push(nb); } }
-    if (!seen.has(center)) for (const k of astar(hq, center)) for (const o of orbit(k)) if (hexes[o] && hexes[o].t === 'water') hexes[o].bridge = true;
+  bridgeToCapital(hexes, hqAll, center, orbit);
+  return { hexes, towns, garrison };
+}
+
+function matchedMap(c, R) {
+  const { n, Rad, G, slots, hqAll, center, density, opts } = c;
+  const rf = (a, b) => a + R() * (b - a), pick = a => a[Math.floor(R() * a.length)];
+  const hexes = boardHexes(Rad), keys = Object.keys(hexes), garrison = {};
+  const orbit = k => { const p = P(k), s = new Set(); for (const g of G) { const [a, b] = g(p); s.add(K(a, b)); } return [...s].filter(x => hexes[x]); };
+  // each hex belongs to the slice of the nearest headquarters; hexes equally near two, or close to the Capital, belong to nobody
+  const slice = {}, members = Array.from({ length: slots }, () => []);
+  for (const k of keys) {
+    const ds = hqAll.map(h => hdist(k, h)), m = Math.min(...ds);
+    if (hdist(k, center) <= 2 || ds.filter(d => d === m).length > 1) { slice[k] = -1; continue; }
+    slice[k] = ds.indexOf(m); members[slice[k]].push(k);
   }
+  const sz = members[0].length;
+  const protect = new Set([center, ...hqAll]);
+  for (const h of hqAll) for (const x of nbrs(h)) protect.add(x);
+  // 1. rivers: each slice gets its own winding river, then all are cut to the same length
+  const nRiv = opts.rivers === undefined ? 1 : opts.rivers, want = Math.round(Rad * 0.95);
+  const riverIn = members.map(() => []);
+  const step = (k, d) => { const [q, r] = P(k); return K(q + DIRS[d][0], r + DIRS[d][1]); };
+  const walk = (i, taken) => {
+    const starts = members[i].filter(k => !protect.has(k) && !taken.has(k) && hdist(k, center) >= 3 && hdist(k, center) <= Math.max(4, Math.round(Rad * 0.35)));
+    if (!starts.length) return [];
+    let cur = pick(starts); const out = [], mine = new Set();
+    const outward = [0, 1, 2, 3, 4, 5].filter(d => hdist(step(cur, d), center) > hdist(cur, center));
+    let dir = pick(outward.length ? outward : [0, 1, 2, 3, 4, 5]), steps = 0;
+    while (steps++ < want * 3 && out.length < want) {
+      if (slice[cur] === i && !protect.has(cur) && !taken.has(cur) && !mine.has(cur)) { mine.add(cur); out.push(cur); }
+      if (R() < 0.35) dir = (dir + (R() < 0.5 ? 1 : 5)) % 6;
+      let nx = step(cur, dir), t = 0;
+      while ((!hexes[nx] || slice[nx] !== i || mine.has(nx) || taken.has(nx)) && t++ < 6) { dir = (dir + (R() < 0.5 ? 1 : 5)) % 6; nx = step(cur, dir); }
+      if (!hexes[nx] || slice[nx] !== i || mine.has(nx)) break;
+      cur = nx;
+    }
+    return out;
+  };
+  for (let i = 0; i < slots; i++) {
+    const taken = new Set();
+    for (let rv = 0; rv < nRiv; rv++) {
+      // try a few courses and keep the longest, so no slice is left with a stub of a river
+      let best = []; for (let t = 0; t < 10 && best.length < want; t++) { const w = walk(i, taken); if (w.length > best.length) best = w; }
+      for (const k of best) { hexes[k].t = 'water'; riverIn[i].push(k); taken.add(k); }
+    }
+  }
+  const rivLen = Math.min(...riverIn.map(a => a.length));
+  for (let i = 0; i < slots; i++) { for (const k of riverIn[i].slice(rivLen)) hexes[k].t = 'clear'; riverIn[i] = riverIn[i].slice(0, rivLen); }
+  // 2. towns: the first slice's towns are drawn freely; every other slice gets towns at the same distances
+  //    from its headquarters and from the Capital, but in different places, with the same militia in them
+  const towns = [], usedNames = new Set(), tname = () => { let s; do s = pick(TOWNS); while (usedNames.has(s)); usedNames.add(s); return s; };
+  const setTown = (k, kind, name, owner) => { const h = hexes[k]; h.t = 'town'; h.town = { name, kind, owner, fort: kind === 'town' ? 0 : 1 }; towns.push(k); };
+  setTown(center, 'city', pick(CAPITALS), NEUTRAL);
+  hqAll.forEach((k, i) => setTown(k, 'hq', HQ_NAMES[i], i < n ? i : NEUTRAL));
+  if (n === 5) { const k = hqAll[5]; hexes[k].town.kind = 'town'; hexes[k].town.name = tname(); hexes[k].town.fort = 1; }
+  const perSeat = Math.round(Rad * 0.55 * (opts.towns === 'many' ? 1.4 : opts.towns === 'few' ? 0.7 : 1));
+  const okSpot = k => hexes[k] && hexes[k].t !== 'water' && !hexes[k].town && !protect.has(k) && towns.every(t => hdist(t, k) >= 3) && nbrs(k).filter(x => hexes[x] && hexes[x].t !== 'water').length >= 2;
+  // which slice is drawn freely is itself left to chance, so no seat is always the one the others are fitted to
+  const ti = Math.floor(R() * slots);
+  const tmpl = []; let tries = 0;
+  while (tmpl.length < perSeat && tries++ < 3000) { const k = pick(members[ti]); if (!okSpot(k)) continue; setTown(k, 'town', tname(), NEUTRAL); const str = 4 + Math.floor(R() * 2); garrison[k] = str; tmpl.push({ dH: hdist(k, hqAll[ti]), dC: hdist(k, center), str }); }
+  for (let i = 0; i < slots; i++) if (i !== ti) for (const t of tmpl) {
+    let done = false;
+    for (const [a, b] of [[0, 0], [0, 1], [1, 1], [1, 2]]) {
+      const cand = members[i].filter(k => okSpot(k) && Math.abs(hdist(k, hqAll[i]) - t.dH) <= a && Math.abs(hdist(k, center) - t.dC) <= b);
+      if (cand.length) { const k = pick(cand); setTown(k, 'town', tname(), NEUTRAL); garrison[k] = t.str; done = true; break; }
+    }
+    if (!done) return null;
+  }
+  // 3. farms: one beside every town, two beside headquarters and the Capital, and a few more in the country
+  const nearestTownOf = k => { let best = null, bd = 1e9, ties = 0; for (const t of towns) { const d = hdist(t, k); if (d < bd) { bd = d; best = t; ties = 0; } else if (d === bd) ties++; } return ties ? null : best; };
+  for (const t of towns) {
+    const cand = nbrs(t).filter(x => hexes[x] && hexes[x].t === 'clear' && !hexes[x].town && !hexes[x].farm && nearestTownOf(x) === t && (t === center || slice[x] === slice[t]));
+    for (let i = 0; i < (hexes[t].town.kind === 'town' ? 1 : 2) && cand.length; i++) { const x = cand.splice(Math.floor(R() * cand.length), 1)[0]; hexes[x].farm = { town: t, burned: 0 }; }
+  }
+  const extra = Math.max(1, Math.round(sz * 0.022));
+  for (let i = 0; i < slots; i++) { let got = 0, t = 0; while (got < extra && t++ < 400) { const k = pick(members[i]); const h = hexes[k]; if (h.t !== 'clear' || h.town || h.farm || protect.has(k)) continue; const owner = nearestTownOf(k); if (!owner || (owner !== center && slice[owner] !== i)) continue; h.farm = { town: owner, burned: 0 }; got++; } }
+  const farmsOf = i => keys.filter(k => hexes[k].farm && slice[hexes[k].farm.town] === i).length;
+  const fTarget = Math.max(...members.map((_, i) => farmsOf(i)));
+  for (let i = 0; i < slots; i++) { let t = 0; while (farmsOf(i) < fTarget && t++ < 400) { const k = pick(members[i]); const h = hexes[k]; if (h.t !== 'clear' || h.town || h.farm || protect.has(k)) continue; const owner = nearestTownOf(k); if (!owner || slice[owner] !== i) continue; h.farm = { town: owner, burned: 0 }; } }
+  // 4. hills and woods: each slice gets its own patches of high ground and forest, in exactly the same amounts
+  const nbH = Math.max(1, Math.round(Math.max(2, Math.round(Rad * 0.45 / Math.max(1, G.length / 2))) * 0.8 * 0.7 + 0.5));
+  const nbW = Math.max(1, Math.round(Math.max(2, Math.round(Rad * 0.45 / Math.max(1, G.length / 2))) * 1.3 * density * 0.7 + 0.5));
+  const bumpsIn = (i, count, rad) => Array.from({ length: count }, () => { const [x, y] = toXY(...P(pick(members[i]))); return { x, y, r: rf(0.6, 1.4) * rad, h: rf(0.5, 1) }; });
+  const allH = [], allW = [];
+  for (let i = 0; i < slots; i++) { allH.push(...bumpsIn(i, nbH, 3.6)); allW.push(...bumpsIn(i, nbW, 4.2)); }
+  const fH = smoothField(allH), fW = smoothField(allW), vH = {}, vW = {};
+  for (const k of keys) { vH[k] = fH(k); vW[k] = fW(k); }
+  const free = k => hexes[k].t === 'clear' && !hexes[k].town && !hexes[k].farm;
+  const nH = Math.round(sz * 0.12 * Math.sqrt(density)), nW = Math.round(sz * 0.22 * density);
+  let thH = 0, thW = 0;
+  for (let i = 0; i < slots; i++) {
+    const byH = members[i].filter(free).sort((a, b) => vH[b] - vH[a]);
+    for (const k of byH.slice(0, nH)) hexes[k].t = 'hills'; thH += (vH[byH[Math.min(nH, byH.length) - 1]] || 0) / slots;
+    const byW = members[i].filter(free).sort((a, b) => vW[b] - vW[a]);
+    for (const k of byW.slice(0, nW)) hexes[k].t = 'woods'; thW += (vW[byW[Math.min(nW, byW.length) - 1]] || 0) / slots;
+  }
+  // the seams between slices are shared ground, drawn from the same patches
+  for (const k of keys) if (slice[k] === -1 && hdist(k, center) > 2 && free(k)) { if (vH[k] >= thH) hexes[k].t = 'hills'; else if (vW[k] >= thW) hexes[k].t = 'woods'; }
+  // the ground round the Capital is the same on every approach
+  const doneO = new Set();
+  for (const k of keys) {
+    if (k === center || hdist(k, center) > 2 || doneO.has(k)) continue;
+    const o = orbit(k); for (const x of o) doneO.add(x);
+    const r = R(), t = hdist(k, center) > 1 && r < 0.12 ? 'hills' : r < 0.3 ? 'woods' : 'clear';
+    for (const x of o) if (free(x) && hexes[x].t === 'clear') hexes[x].t = t;
+  }
+  // 5. roads between neighbouring towns, and a railway from every headquarters to the Capital
+  const mark = (path, f) => { for (const k of path) if (hexes[k]) hexes[k][f] = true; };
+  for (const t of towns.filter(t => hexes[t].town.kind === 'town')) { const near = towns.filter(x => x !== t).sort((a, b) => hdist(a, t) - hdist(b, t)).slice(0, 2); for (const x of near) mark(astarOn(hexes, t, x), 'road'); }
+  // the railway runs as straight as the hexes allow, so every headquarters is the same distance from the Capital by rail
+  const straight = (a, b) => { const out = [a]; let cur = a; while (cur !== b) { const opts2 = nbrs(cur).filter(x => hexes[x] && hdist(x, b) < hdist(cur, b)); const pref = opts2.filter(x => !hexes[x].town || x === b); const nx = pick(pref.length ? pref : opts2); out.push(nx); cur = nx; } return out; };
+  const railOf = hqAll.map(hq => { const p = straight(hq, center); mark(p, 'rail'); return new Set(p); });
+  // every slice gets the same number of towns on its railway: short branch lines make up the difference
+  const railTownsOf = i => towns.filter(t => slice[t] === i && t !== hqAll[i] && railOf[i].has(t)).length;
+  const target = Math.max(...hqAll.map((_, i) => railTownsOf(i)));
+  for (let i = 0; i < slots; i++) {
+    let guard = 0;
+    while (railTownsOf(i) < target && guard++ < 5) {
+      const off = towns.filter(t => slice[t] === i && t !== hqAll[i] && !railOf[i].has(t));
+      if (!off.length) break;
+      const dTo = t => Math.min(...[...railOf[i]].filter(x => x !== center).map(x => hdist(x, t)));
+      const t = off.sort((a, b) => dTo(a) - dTo(b))[0];
+      const join = [...railOf[i]].filter(x => x !== center).sort((a, b) => hdist(a, t) - hdist(b, t))[0];
+      const p = astarOn(hexes, t, join); mark(p, 'rail'); for (const x of p) railOf[i].add(x);
+    }
+  }
+  for (const k of keys) { const h = hexes[k]; if (h.t === 'water' && (h.road || h.rail)) h.bridge = true; }
+  // fords: the same number on every slice's river
+  const fords = Math.round(rivLen * 0.12);
+  for (let i = 0; i < slots; i++) { const cand = riverIn[i].filter(k => !hexes[k].bridge); for (let j = 0; j < fords && cand.length; j++) hexes[cand.splice(Math.floor(R() * cand.length), 1)[0]].ford = true; }
+  bridgeToCapital(hexes, hqAll, center, null);
+  return { hexes, towns, garrison, slice, members };
+}
+// how unfair is a matched map? 0 means every army starts equally placed, within tolerance
+function mapUnfairness(M, c) {
+  const { hexes, towns, slice } = M, { hqAll, center, n, slots } = c;
+  const per = [];
+  for (let i = 0; i < slots; i++) {
+    const hq = hqAll[i], cost = marchCosts(hexes, hq);
+    const mine = towns.filter(t => slice[t] === i && t !== hq);
+    const toCap = cost[center] === undefined ? 99 : cost[center];
+    const toTowns = mine.reduce((s, t) => s + (cost[t] === undefined ? 30 : cost[t]), 0);
+    const farms = Object.keys(hexes).filter(k => hexes[k].farm && hexes[k].farm.town && (slice[hexes[k].farm.town] === i)).length;
+    // towns joined to this headquarters by its own railway (each is worth +1 supply a month)
+    const seen = new Set([hq]), q = [hq]; let railTowns = 0;
+    while (q.length) { const x = q.shift(); for (const nb of nbrs(x)) { const h = hexes[nb]; if (h && h.rail && !seen.has(nb) && hdist(nb, hq) < hdist(center, hq) + 3) { seen.add(nb); q.push(nb); if (h.town && slice[nb] === i) railTowns++; } } }
+    per.push({ toCap, toTowns, farms, railTowns, towns: mine.length });
+  }
+  const seats = per.slice(0, n === 5 ? 6 : n);
+  const spread = f => { const v = seats.map(f); const mx = Math.max(...v), mn = Math.min(...v), avg = v.reduce((a, b) => a + b, 0) / v.length; return { rel: avg ? (mx - mn) / avg : 0, abs: mx - mn }; };
+  let bad = 0;
+  bad += Math.max(0, spread(p => p.toCap).rel - 0.12) * 10;
+  bad += Math.max(0, spread(p => p.toTowns).rel - 0.2) * 10;
+  bad += spread(p => p.farms).abs + spread(p => p.railTowns).abs * 2 + spread(p => p.towns).abs * 5;
+  return { bad, per };
+}
+
+E.newGame = function (opts) {
+  const n = clamp(opts.seats | 0, 2, 6);
+  const seed = (opts.seed >>> 0) || ((Math.random() * 4294967295) >>> 0);
+  const R = rng(seed), pick = a => a[Math.floor(R() * a.length)];
+  const size = opts.mapSize || 'normal';
+  const Rad = ({ 2: 10, 3: 11, 4: 12, 5: 14, 6: 14 }[n]) + (size === 'large' ? 3 : size === 'small' ? -2 : 0);
+  const G = groupFor(n), slots = n === 5 ? 6 : n;
+  const density = { light: 0.7, normal: 1, heavy: 1.35 }[opts.terrain || 'normal'];
+  // headquarters always stand the same distance from the Capital, evenly round the board
+  const ang = seatAngle(n) * Math.PI / 180, dist0 = Rad * 0.74;
+  const h0 = fromXY(Math.cos(ang) * dist0 * Math.sqrt(3), Math.sin(ang) * dist0 * 1.5);
+  const hqAll = G.map(g => K(...g(h0)));
+  const center = K(0, 0);
+  const layout = opts.layout === 'mirror' ? 'mirror' : 'matched';
+  const ctx = { n, Rad, G, slots, hqAll, center, density, opts };
+  let M;
+  if (layout === 'mirror') M = mirrorMap(ctx, R);
+  else {
+    let best = null;
+    for (let a = 0; a < 40; a++) {
+      const m = matchedMap(ctx, rng((seed + a * 0x9e3779b1) >>> 0)); if (!m) continue;
+      const f = mapUnfairness(m, ctx);
+      if (!best || f.bad < best.f.bad) best = { m, f, a };
+      if (f.bad <= 0) break;
+    }
+    if (best) E._lastMapInfo = { attempts: best.a + 1, bad: best.f.bad, per: best.f.per };
+    M = best ? best.m : mirrorMap(ctx, R);
+  }
+  const { hexes, towns, garrison } = M;
   const humans = opts.humans === undefined ? n : opts.humans;
   const seats = [];
   for (let i = 0; i < n; i++) seats.push({ seat: i, color: COLORS[i].id, name: (opts.names && opts.names[i]) || (i < humans ? '' : `General ${['Ashby', 'Bragg', 'Custis', 'Doyle', 'Ewing', 'Foote'][i]}`), bot: i >= humans, hq: hqAll[i], alive: true, men: 6, sup: 10, goal: null, stats: { kills: 0, raids: 0, hqLost: false }, submitted: false, joined: i >= humans });
   const state = {
-    v: 1, id: opts.id || null, name: opts.name || 'The Long Campaign', seed, R: Rad, n, hexes, seats, units: {}, nextId: 1, turn: 1,
+    v: 2, id: opts.id || null, name: opts.name || 'The Long Campaign', seed, R: Rad, n, layout, hexes, seats, units: {}, nextId: 1, turn: 1,
     startMonth: opts.startMonth === undefined ? 3 : opts.startMonth, startYear: 1861, mode: opts.mode || 'points', turnLimit: opts.turnLimit || 30, eraTurns: opts.eraTurns || 8,
     center, rel: { sight: seats.map(() => seats.map(() => false)), passage: seats.map(() => seats.map(() => false)) },
+    deals: [], locks: [], nextDeal: 1,
     weather: { fronts: [] }, capitalHold: { seat: null, count: 0 }, lastEvents: [], log: [], over: null, created: Date.now(), rngState: seed ^ 0x9e3779b9
   };
-  // armies: each starts at its headquarters
+  // armies: each starts at its headquarters, with its other five units on the ring round it nearest the Capital
   const place = (seat, type, k, str) => { const id = 'u' + state.nextId++; state.units[id] = { id, seat, type, at: k, str: str || 10 }; return id; };
-  // seat 0 is laid out once and every other army gets the same layout turned to face the centre
-  const ring0 = nbrs(hqAll[0]).filter(x => hexes[x] && hexes[x].t !== 'water' && !hexes[x].town).sort((a, b) => hdist(a, center) - hdist(b, center));
   for (let i = 0; i < n; i++) {
+    const ring = nbrs(hqAll[i]).filter(x => hexes[x] && hexes[x].t !== 'water' && !hexes[x].town).sort((a, b) => hdist(a, center) - hdist(b, center) || (a < b ? -1 : 1));
     place(i, 'inf', hqAll[i]);
-    ['inf', 'cav', 'art', 'eng', 'gen'].forEach((t, j) => { if (ring0[j]) place(i, t, K(...G[i](P(ring0[j])))); });
+    ['inf', 'cav', 'art', 'eng', 'gen'].forEach((t, j) => { if (ring[j]) place(i, t, ring[j]); });
   }
   // neutral garrisons hold every unclaimed town
   for (const t of towns) {
     const tw = hexes[t].town; if (tw.owner !== NEUTRAL) continue;
     // with five armies the empty sixth slice is held by strong garrisons, so its neighbours gain no free land
     const inEmpty = n === 5 && hdist(t, hqAll[5]) < Math.min(...hqAll.slice(0, 5).map(h => hdist(t, h)));
-    place(NEUTRAL, 'inf', t, tw.kind === 'city' || inEmpty ? 10 : 4 + Math.floor(R() * 2)); if (tw.kind === 'city' || inEmpty) hexes[t].ent = inEmpty ? 2 : 1;
+    place(NEUTRAL, 'inf', t, tw.kind === 'city' || inEmpty ? 10 : garrison[t] || 4); if (tw.kind === 'city' || inEmpty) hexes[t].ent = inEmpty ? 2 : 1;
   }
   // secret goals
   const gl = Object.keys(GOALS); for (let i = gl.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [gl[i], gl[j]] = [gl[j], gl[i]]; }
   const allTowns = towns.length;
   seats.forEach((s, i) => { const id = gl[i % gl.length]; const nn = id === 'towns' ? Math.max(4, Math.round(allTowns / n * 1.3)) : id === 'kills' ? 6 : id === 'raider' ? 5 : 0; s.goal = { id, n: nn, text: GOALS[id].text.replace('{n}', nn), vp: GOALS[id].vp }; });
-  // the first weather
   advanceWeather(state, true); advanceWeather(state, true); advanceWeather(state, true);
   makeForecast(state);
   state.log.push({ turn: 0, text: `War is declared. ${n} armies take the field.` });
   return state;
 };
+E._mapgen = { matchedMap, mirrorMap, mapUnfairness, groupFor };
 
 /* ---------------- calendar, weather and eras ---------------- */
 E.dateOf = (state, turn) => { const m = (state.startMonth + (turn - 1)) % 12, y = state.startYear + Math.floor((state.startMonth + turn - 1) / 12); return { month: m, year: y, label: `${MONTHS[m]} ${y}`, season: SEASON_OF(m) }; };
@@ -307,14 +487,18 @@ E.visibleSet = function (state, seat, fronts) {
   for (let s = 0; s < state.n; s++) if (s !== seat && state.rel.sight[s][seat] && state.seats[s].alive) viewers.push(s);
   const add = (k, rng) => { const [q0, r0] = P(k); for (let dq = -rng; dq <= rng; dq++) for (let dr = -rng; dr <= rng; dr++) { if (Math.abs(dq + dr) > rng) continue; const x = K(q0 + dq, r0 + dr); if (state.hexes[x]) vis.add(x); } };
   for (const id in state.units) { const u = state.units[id]; if (!viewers.includes(u.seat)) continue; let s = UNIT[u.type].sight + (state.hexes[u.at].t === 'hills' ? 1 : 0); if (E.weatherAt(fronts, u.at) === 'fog') s = 1; add(u.at, s); }
-  for (const k in state.hexes) { const t = state.hexes[k].town; if (t && viewers.includes(t.owner)) add(k, E.weatherAt(fronts, k) === 'fog' ? 1 : t.kind === 'town' ? 1 : 2); }
+  for (const k in state.hexes) { const h = state.hexes[k], t = h.town; if (t && viewers.includes(t.owner)) add(k, E.weatherAt(fronts, k) === 'fog' ? 1 : t.kind === 'town' ? 1 : 2); if (h.tower && viewers.includes(h.tower.seat)) add(k, E.towerSight(state, k, fronts)); }
   return vis;
 };
+E.towerSight = (state, k, fronts) => E.weatherAt(fronts, k) === 'fog' ? TOWER.fogSight : TOWER.sight + (state.hexes[k].t === 'hills' ? 1 : 0);
+E.towersOf = (state, seat) => Object.keys(state.hexes).filter(k => state.hexes[k].tower && state.hexes[k].tower.seat === seat);
 E.canSeeUnit = function (state, seat, u, vis) {
   if (u.seat === seat || (u.seat !== NEUTRAL && state.rel.sight[u.seat][seat])) return true;
   if (!vis.has(u.at)) return false;
   if (state.hexes[u.at].t === 'woods') { // woods hide troops from all but the closest look
     for (const id in state.units) { const v = state.units[id]; if ((v.seat === seat || (v.seat !== NEUTRAL && state.rel.sight[v.seat][seat])) && hdist(v.at, u.at) <= 1) return true; }
+    // a watchtower looks down into the trees from a little further off
+    for (const k in state.hexes) { const tw = state.hexes[k].tower; if (tw && (tw.seat === seat || state.rel.sight[tw.seat][seat]) && hdist(k, u.at) <= TOWER.woodsSpot) return true; }
     return false;
   }
   return true;
@@ -330,6 +514,7 @@ E.view = function (state, seat) {
   return {
     v: state.v, id: state.id, name: state.name, R: state.R, n: state.n, seed: state.seed, turn: state.turn, mode: state.mode, turnLimit: state.turnLimit, eraTurns: state.eraTurns, startMonth: state.startMonth, startYear: state.startYear,
     center: state.center, hexes: state.hexes, units, seats, me: seat, rel: state.rel, visible: [...vis], weather: { fronts: state.weather.fronts, forecast: state.weather.forecast }, capitalHold: state.capitalHold,
+    deals: (state.deals || []).filter(d => d.from === seat || d.to === seat || state.over).map(d => ({ ...d })), locks: (state.locks || []).filter(l => l.from === seat || l.to === seat).map(l => ({ ...l })),
     events: ev.map(e => { const c = { ...e }; delete c.vis; return c; }), log: state.log.filter(l => !l.vis || l.vis.includes(seat) || state.over).slice(-60).map(l => ({ turn: l.turn, text: l.text })), over: state.over, deadline: state.deadline, myOrders: state.orders && state.orders[seat] || null
   };
 };
@@ -380,8 +565,8 @@ E.inSupplyAt = function (state, seat, at) {
 /* ---------------- orders ---------------- */
 // orders = { units: {id: {k:'move', path:[...]} | {k:'hold'} | {k:'support', unit} (back that unit: add to its attack, or to its defence) | {k:'support', hex, for} (older form: a battle in a hex) | {k:'bombard', hex} | {k:'raid'} | {k:'dig'} | {k:'fortify'} | {k:'bridge', hex} | {k:'repair'} | {k:'merge', into} }, a move may carry detach: n, recruit: [{hex, type}], diplo: {sight:[], passage:[], gift: [{to, men, sup}]} }
 E.cleanOrders = function (state, seat, o) {
-  const out = { units: {}, recruit: [], diplo: { sight: state.rel.sight[seat].slice(), passage: state.rel.passage[seat].slice(), gift: [] } };
-  if (!o || typeof o !== 'object') return out;
+  const out = { units: {}, recruit: [], diplo: { sight: state.rel.sight[seat].slice(), passage: state.rel.passage[seat].slice(), gift: [], offer: [], accept: [], decline: [], withdraw: [] } };
+  if (!o || typeof o !== 'object') { E.applyLocks(state, seat, out.diplo, state.turn + 1); return out; }
   const occ = E.occupancy(state), detaches = [];
   for (const id in (o.units || {})) {
     const u = state.units[id], ord = o.units[id]; if (!u || u.seat !== seat || !ord) continue;
@@ -395,6 +580,7 @@ E.cleanOrders = function (state, seat, o) {
     else if (k === 'bombard' && u.type === 'art' && state.hexes[ord.hex] && hdist(u.at, ord.hex) >= 1 && hdist(u.at, ord.hex) <= 2) out.units[id] = { k: 'bombard', hex: ord.hex };
     else if (k === 'raid' && u.type === 'cav') out.units[id] = { k: 'raid' };
     else if ((k === 'dig' || k === 'fortify' || k === 'repair') && u.type === 'eng') out.units[id] = { k };
+    else if (k === 'tower' && u.type === 'eng') { const h = state.hexes[u.at]; const planned = Object.values(out.units).filter(x => x.k === 'tower').length; if (!h.town && h.t !== 'water' && !h.tower && E.towersOf(state, seat).length + planned < TOWER.max) out.units[id] = { k: 'tower' }; }
     else if (k === 'bridge' && u.type === 'eng' && state.hexes[ord.hex] && hdist(u.at, ord.hex) === 1 && state.hexes[ord.hex].t === 'water') out.units[id] = { k: 'bridge', hex: ord.hex };
     else if (k === 'merge' && u.type !== 'gen') { const t = state.units[ord.into]; if (t && t !== u && t.seat === seat && t.type === u.type && t.str < 10 && u.str < 10 && hdist(t.at, u.at) === 1) out.units[id] = { k: 'merge', into: t.id }; }
     else if (k === 'hold') out.units[id] = { k: 'hold' };
@@ -417,8 +603,21 @@ E.cleanOrders = function (state, seat, o) {
   for (let i = 0; i < state.n; i++) if (i !== seat) { if (Array.isArray(d.sight) && typeof d.sight[i] === 'boolean') out.diplo.sight[i] = d.sight[i]; if (Array.isArray(d.passage) && typeof d.passage[i] === 'boolean') out.diplo.passage[i] = d.passage[i]; }
   let gm = men, gs = sup;
   for (const g of (d.gift || []).slice(0, 5)) { const to = g.to | 0, m = clamp(g.men | 0, 0, gm), su = clamp(g.sup | 0, 0, gs); if (to === seat || to < 0 || to >= state.n || (!m && !su)) continue; gm -= m; gs -= su; out.diplo.gift.push({ to, men: m, sup: su }); }
+  // binding deals: new offers, and answers to offers already on the table
+  const terms = x => ({ men: clamp((x && x.men) | 0, 0, 99), sup: clamp((x && x.sup) | 0, 0, 99), sight: clamp((x && x.sight) | 0, 0, DEAL.maxMonths), passage: clamp((x && x.passage) | 0, 0, DEAL.maxMonths) });
+  const empty = t => !t.men && !t.sup && !t.sight && !t.passage;
+  for (const f of (Array.isArray(d.offer) ? d.offer : []).slice(0, DEAL.maxOffers)) { const to = f && Number.isInteger(f.to) ? f.to : -1; if (to === seat || to < 0 || to >= state.n || !state.seats[to].alive) continue; const give = terms(f.give), get = terms(f.get); if (empty(give) && empty(get)) continue; out.diplo.offer.push({ to, give, get }); }
+  const open = (state.deals || []).filter(x => x.status === 'open');
+  for (const f of ['accept', 'decline']) for (const id of (Array.isArray(d[f]) ? d[f] : [])) { const x = open.find(y => y.id === id); if (x && x.to === seat && !out.diplo.accept.includes(id) && !out.diplo.decline.includes(id)) out.diplo[f].push(id); }
+  for (const id of (Array.isArray(d.withdraw) ? d.withdraw : [])) { const x = open.find(y => y.id === id); if (x && x.from === seat) out.diplo.withdraw.push(id); }
+  E.applyLocks(state, seat, out.diplo, state.turn + 1);
   return out;
 };
+function dealText(x) { const b = []; if (x.men) b.push(`${x.men} recruit${x.men > 1 ? 's' : ''}`); if (x.sup) b.push(`${x.sup} supply`); if (x.sight) b.push(`scouts' reports for ${x.sight} month${x.sight > 1 ? 's' : ''}`); if (x.passage) b.push(`free passage for ${x.passage} month${x.passage > 1 ? 's' : ''}`); return b.length ? b.join(', ') : 'nothing'; }
+E.dealText = dealText;
+// terms sealed in a binding deal cannot be withdrawn until they run out
+E.lockFor = (state, kind, from, to, turn) => (state.locks || []).find(l => l.kind === kind && l.from === from && l.to === to && l.until >= turn);
+E.applyLocks = function (state, seat, diplo, turn) { for (const l of state.locks || []) if (l.from === seat && l.until >= turn && diplo[l.kind]) diplo[l.kind][l.to] = true; };
 E.occupancy = function (state) { const o = {}; for (const id in state.units) { const u = state.units[id]; o[u.at] = u; } return o; };
 
 /* ---------------- combat ---------------- */
@@ -446,7 +645,28 @@ E.resolve = function (state, ordersBySeat) {
   const O = {};
   for (let s = 0; s < state.n; s++) O[s] = E.cleanOrders(state, s, (ordersBySeat || {})[s] || (state.seats[s].bot ? E.botOrders(state, s) : null));
   const unitOrder = id => { const u = state.units[id]; if (!u || u.seat === NEUTRAL) return { k: 'hold' }; return (O[u.seat].units[id]) || { k: 'hold' }; };
-  // 1. diplomacy changes and gifts
+  // 1. binding deals, then diplomacy changes and gifts
+  if (!state.deals) state.deals = []; if (!state.locks) state.locks = []; if (!state.nextDeal) state.nextDeal = 1;
+  for (const x of state.deals.filter(x => x.status === 'open')) {
+    const by = O[x.from].diplo, them = O[x.to].diplo, A = state.seats[x.from], B = state.seats[x.to];
+    if (!A.alive || !B.alive) { x.status = 'void'; continue; }
+    if (by.withdraw.includes(x.id)) { x.status = 'withdrawn'; ev.push({ k: 'deal', text: `${nameOf(state, x.from)} withdraws its offer to ${nameOf(state, x.to)}.`, vis: [x.from, x.to] }); continue; }
+    if (them.decline.includes(x.id)) { x.status = 'refused'; ev.push({ k: 'deal', text: `${nameOf(state, x.to)} turns down the deal offered by ${nameOf(state, x.from)}.`, vis: [x.from, x.to] }); continue; }
+    if (!them.accept.includes(x.id)) { if (state.turn > x.made + 1) { x.status = 'expired'; ev.push({ k: 'deal', text: `The deal ${nameOf(state, x.from)} offered ${nameOf(state, x.to)} lapses unanswered.`, vis: [x.from, x.to] }); } continue; }
+    const short = []; if (A.men < x.give.men || A.sup < x.give.sup + DEAL.fee) short.push(nameOf(state, x.from)); if (B.men < x.get.men || B.sup < x.get.sup + DEAL.fee) short.push(nameOf(state, x.to));
+    if (short.length) { x.status = 'failed'; ev.push({ k: 'deal', text: `The deal between ${nameOf(state, x.from)} and ${nameOf(state, x.to)} falls through: ${short.join(' and ')} cannot pay. Nobody pays the mediator.`, vis: [x.from, x.to] }); continue; }
+    A.men -= x.give.men; A.sup -= x.give.sup + DEAL.fee; B.men += x.give.men; B.sup += x.give.sup;
+    B.men -= x.get.men; B.sup -= x.get.sup + DEAL.fee; A.men += x.get.men; A.sup += x.get.sup;
+    for (const [from, to, t] of [[x.from, x.to, x.give], [x.to, x.from, x.get]]) for (const kind of ['sight', 'passage']) if (t[kind]) { const until = state.turn + t[kind]; const old = E.lockFor(state, kind, from, to, state.turn); if (old) old.until = Math.max(old.until, until); else state.locks.push({ kind, from, to, until, deal: x.id }); }
+    x.status = 'sealed'; x.sealed = state.turn;
+    ev.push({ k: 'deal', text: `${nameOf(state, x.from)} and ${nameOf(state, x.to)} seal a binding deal: ${nameOf(state, x.from)} gives ${dealText(x.give)}; ${nameOf(state, x.to)} gives ${dealText(x.get)}. Each pays the mediator ${DEAL.fee} supply.`, vis: [x.from, x.to] });
+  }
+  for (let s = 0; s < state.n; s++) if (state.seats[s].alive) for (const f of O[s].diplo.offer) {
+    const x = { id: 'd' + state.nextDeal++, from: s, to: f.to, give: f.give, get: f.get, made: state.turn, status: 'open' };
+    state.deals.push(x);
+    ev.push({ k: 'deal', text: `${nameOf(state, s)} offers ${nameOf(state, f.to)} a binding deal: ${dealText(f.give)} for ${dealText(f.get)}. It stands for one month.`, vis: [s, f.to] });
+  }
+  for (let s = 0; s < state.n; s++) E.applyLocks(state, s, O[s].diplo, state.turn + 1);
   for (let s = 0; s < state.n; s++) {
     if (!state.seats[s].alive) continue;
     const d = O[s].diplo;
@@ -528,6 +748,7 @@ E.resolve = function (state, ordersBySeat) {
     const h = H[o.hex];
     if (h.ent) h.ent = Math.max(0, h.ent - 1);
     if (h.town && h.town.fort && R() < 0.4) h.town.fort--;
+    if (h.tower && h.tower.seat !== u.seat) { ev.push({ k: 'towerdown', hex: o.hex, seat: h.tower.seat, text: `${uname(state, u)} shells the ${nameOf(state, h.tower.seat)} watchtower ${hexName(state, o.hex)} to splinters.` }); delete h.tower; }
     if (!t || t.seat === u.seat) { ev.push({ k: 'bombard', from: u.at, hex: o.hex, dmg: 0 }); continue; }
     const terr = h.town ? KIND[h.town.kind].def : TER[h.t] ? TER[h.t].def : 1;
     const dmg = Math.max(1, Math.round(UNIT.art.bombard * (u.str / 10) * (E.eraOf(state, u.seat) >= 1 ? 1.25 : 1) * (0.35 + R() * 0.4) / terr));
@@ -613,10 +834,12 @@ E.resolve = function (state, ordersBySeat) {
     } else if (o.k === 'dig') { const max = E.eraOf(state, u.seat) >= 3 ? 3 : 2; if ((h.ent || 0) < max) { h.ent = (h.ent || 0) + 1; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} digs earthworks (${h.ent}).` }); } }
     else if (o.k === 'fortify' && h.town && h.town.owner === u.seat && h.town.fort < 3 && state.seats[u.seat].sup >= 2) { state.seats[u.seat].sup -= 2; h.town.fort++; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} fortifies ${h.town.name} (level ${h.town.fort}).` }); }
     else if (o.k === 'bridge' && state.seats[u.seat].sup >= 3) { const b = H[o.hex]; if (b && b.t === 'water' && !b.bridge) { state.seats[u.seat].sup -= 3; b.bridge = true; ev.push({ k: 'dig', hex: o.hex, text: `${uname(state, u)} throws a bridge across the river.` }); } }
+    else if (o.k === 'tower' && !h.town && h.t !== 'water' && !h.tower && E.towersOf(state, u.seat).length < TOWER.max && state.seats[u.seat].sup >= TOWER.cost) { state.seats[u.seat].sup -= TOWER.cost; h.tower = { seat: u.seat, built: state.turn }; ev.push({ k: 'tower', hex: u.at, seat: u.seat, text: `${uname(state, u)} raise a watchtower ${hexName(state, u.at)}.` }); }
     else if (o.k === 'repair') { for (const x of [u.at, ...nbrs(u.at)]) if (H[x] && H[x].railBroken) H[x].railBroken = false; ev.push({ k: 'dig', hex: u.at, text: `${uname(state, u)} repairs the railway.` }); }
     else if (o.k === 'hold' && u.type === 'inf' && !moved[id] && (h.ent || 0) < 1 && !h.town) { h.ent = 1; }
   }
-  // 6. towns change hands
+  // 6. watchtowers are burned by any other army ending its month on them (unless the owner grants it free passage), and towns change hands
+  for (const id in state.units) { const u = state.units[id], h = H[u.at]; if (!h.tower || u.seat === NEUTRAL || u.seat === h.tower.seat || state.rel.passage[h.tower.seat][u.seat]) continue; ev.push({ k: 'towerdown', hex: u.at, seat: h.tower.seat, text: `${uname(state, u)} burn${u.type === 'inf' || u.type === 'eng' ? '' : 's'} the ${nameOf(state, h.tower.seat)} watchtower ${hexName(state, u.at)}.` }); delete h.tower; }
   for (const id in state.units) {
     const u = state.units[id], h = H[u.at]; if (!h.town || u.seat === NEUTRAL || u.type === 'gen' || h.town.owner === u.seat) continue;
     const prev = h.town.owner; h.town.owner = u.seat;
@@ -651,7 +874,7 @@ E.resolve = function (state, ordersBySeat) {
   // 8. eliminations
   for (const s of state.seats) {
     if (!s.alive) continue;
-    if (E.townCount(state, s.seat) === 0) { s.alive = false; for (const u of Object.values(state.units)) if (u.seat === s.seat) { u.seat = NEUTRAL; if (u.type === 'gen') delete state.units[u.id]; } ev.push({ k: 'out', seat: s.seat, text: `${nameOf(state, s.seat)} has lost every town and is out of the war. Its remaining regiments go their own way.` }); }
+    if (E.townCount(state, s.seat) === 0) { s.alive = false; for (const k in H) if (H[k].tower && H[k].tower.seat === s.seat) delete H[k].tower; state.locks = (state.locks || []).filter(l => l.from !== s.seat && l.to !== s.seat); for (const u of Object.values(state.units)) if (u.seat === s.seat) { u.seat = NEUTRAL; if (u.type === 'gen') delete state.units[u.id]; } ev.push({ k: 'out', seat: s.seat, text: `${nameOf(state, s.seat)} has lost every town and is out of the war. Its remaining regiments go their own way.` }); }
   }
   // 9. the capital, the calendar, eras and the end of the war
   const cap = H[state.center].town.owner;
@@ -677,6 +900,19 @@ E.resolve = function (state, ordersBySeat) {
   // who saw what
   const fronts2 = state.weather.fronts;
   const visAfter = state.seats.map(s => E.visibleSet(state, s.seat, fronts2));
+  // watchtowers send word when troops come into view that were not seen last month
+  for (const s of state.seats) {
+    if (!s.alive) continue; let told = 0;
+    const towers = E.towersOf(state, s.seat); if (!towers.length) continue;
+    for (const id in state.units) {
+      const u = state.units[id]; if (u.seat === s.seat || u.seat === NEUTRAL || state.rel.sight[u.seat][s.seat] || told >= 6) continue;
+      const tw = towers.find(k => hdist(k, u.at) <= E.towerSight(state, k, fronts2)); if (!tw || !E.canSeeUnit(state, s.seat, u, visAfter[s.seat])) continue;
+      if (startAt[id] && visBefore[s.seat].has(startAt[id])) continue;
+      told++; ev.push({ k: 'sighting', hex: u.at, seat: s.seat, vis: [s.seat], text: `From the watchtower ${hexName(state, tw)}: ${nameOf(state, u.seat)} ${UNIT[u.type].name.toLowerCase()} seen ${hexName(state, u.at)}.` });
+    }
+  }
+  // locks that have run out
+  state.locks = (state.locks || []).filter(l => l.until >= state.turn);
   for (const e of ev) {
     if (e.vis !== undefined && e.vis !== null) continue;
     const hx = [e.hex, e.from, e.to, e.advFrom, ...(e.path || [])].filter(Boolean);
@@ -709,8 +945,18 @@ E.botOrders = function (state, seat) {
   const H = state.hexes, s = state.seats[seat], R = rng((state.seed + state.turn * 7919 + seat * 104729) >>> 0);
   const units = Object.values(state.units).filter(u => u.seat === seat);
   const occ = E.occupancy(state), fronts = state.weather.fronts;
-  const out = { units: {}, recruit: [], diplo: { sight: state.rel.sight[seat].slice(), passage: state.rel.passage[seat].slice(), gift: [] } };
+  // computer generals share nothing of their own accord; whatever they sold in a deal stays on until it runs out
+  const out = { units: {}, recruit: [], diplo: { sight: state.seats.map(() => false), passage: state.seats.map(() => false), gift: [], offer: [], accept: [], decline: [], withdraw: [] } };
+  // binding deals offered to us: take the ones that pay, after the mediator's fee and a little caution
+  for (const x of (state.deals || []).filter(x => x.status === 'open' && x.to === seat)) {
+    const gain = x.give.men * 1.2 + x.give.sup + x.give.sight * 0.4 + x.give.passage * 0.3;
+    const cost = x.get.men * 1.3 + x.get.sup + x.get.sight * 0.5 + x.get.passage * 1.5 + DEAL.fee;
+    const afford = s.men >= x.get.men && s.sup >= x.get.sup + DEAL.fee + 3;
+    out.diplo[gain - cost >= 0.5 && afford ? 'accept' : 'decline'].push(x.id);
+  }
   const myTowns = Object.keys(H).filter(k => H[k].town && H[k].town.owner === seat);
+  const myTowers = E.towersOf(state, seat); let towersPlanned = 0;
+  const enemyTowers = Object.keys(H).filter(k => H[k].tower && H[k].tower.seat !== seat && !state.rel.passage[H[k].tower.seat][seat] && !occ[k]);
   const targets = Object.keys(H).filter(k => H[k].town && H[k].town.owner !== seat);
   const claimed = new Set();
   const enemies = Object.values(state.units).filter(u => u.seat !== seat);
@@ -733,6 +979,9 @@ E.botOrders = function (state, seat) {
     if (u.at === hq && hqThreat > 10 && u.type === 'inf') { out.units[u.id] = { k: 'hold' }; continue; }
     if (u.str <= 3 && myTowns.length) { const home = myTowns.map(t => [t, hdist(t, u.at) + R() * 0.5]).sort((a, b) => a[1] - b[1])[0][0]; const p = E.pathTo(rc, u.at, nearestReach(rc, home)); if (p && p.length) { out.units[u.id] = { k: 'move', path: p }; continue; } }
     if (u.type === 'eng') { if (H[u.at].town && H[u.at].town.owner === seat && H[u.at].town.fort < 2 && s.sup > 8) { out.units[u.id] = { k: 'fortify' }; continue; } if (H[u.at].railBroken || nbrs(u.at).some(x => H[x] && H[x].railBroken)) { out.units[u.id] = { k: 'repair' }; continue; } }
+    if (u.type === 'eng' && !H[u.at].town && H[u.at].t !== 'water' && !H[u.at].tower && myTowers.length + towersPlanned < 2 && s.sup >= 10 && hdist(u.at, hq) >= 2 && hdist(u.at, hq) <= 6 && !myTowers.some(k => hdist(k, u.at) < 5) && (H[u.at].t === 'hills' || R() < 0.3)) { out.units[u.id] = { k: 'tower' }; towersPlanned++; continue; }
+    // cavalry ride out to burn an enemy watchtower within reach
+    if (u.type === 'cav') { const tw = enemyTowers.filter(k => rc.best[k] !== undefined && !claimed.has(k)).sort((a, b) => rc.best[a] - rc.best[b])[0]; if (tw && R() < 0.7) { const p = E.pathTo(rc, u.at, tw); if (p && p.length) { out.units[u.id] = { k: 'move', path: p }; claimed.add(tw); continue; } } }
     if (u.type === 'cav' && H[u.at].rail && !H[u.at].railBroken && !myTowns.includes(nearestTown(state, u.at))) { out.units[u.id] = { k: 'raid' }; continue; }
     // otherwise march on the nearest town that is not ours
     const jit = {}; for (const t of targets) jit[t] = R() * 0.5;

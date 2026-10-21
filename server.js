@@ -59,7 +59,7 @@ async function createCampaign(body) {
   const seats = Math.max(2, Math.min(6, body.seats | 0 || 4));
   const humans = Math.max(1, Math.min(seats, body.humans | 0 || seats));
   const id = crypto.randomBytes(5).toString('hex');
-  const state = E.newGame({ id, seats, humans, seed: body.seed ? +body.seed : undefined, mapSize: body.mapSize, terrain: body.terrain, towns: body.towns, rivers: body.rivers === undefined ? undefined : +body.rivers, mode: body.mode, turnLimit: Math.max(8, Math.min(60, body.turnLimit | 0 || 30)), name: String(body.name || 'The Long Campaign').slice(0, 60) });
+  const state = E.newGame({ id, seats, humans, seed: body.seed ? +body.seed : undefined, mapSize: body.mapSize, terrain: body.terrain, layout: body.layout === 'mirror' ? 'mirror' : 'matched', towns: body.towns, rivers: body.rivers === undefined ? undefined : +body.rivers, mode: body.mode, turnLimit: Math.max(8, Math.min(60, body.turnLimit | 0 || 30)), name: String(body.name || 'The Long Campaign').slice(0, 60) });
   const hours = Math.max(0.25, Math.min(168, +body.hours || 12));
   const doc = {
     id, status: 'active', created: Date.now(), hours, admin: id + '.' + token(),

@@ -109,6 +109,16 @@ function drawTown(g, h, cx, cy) {
   for (let i = 0; i < (t.fort || 0); i++) { g.fillStyle = '#5a5248'; g.fillRect(cx - 9 + i * 3, cy + 7, 2, 2); }
 }
 
+function drawTower(g, h, cx, cy) {
+  // a timber lookout: four legs, a platform and a roof, with the owner's pennant
+  const x = cx + 4, y = cy - 13;
+  g.fillStyle = '#17110a'; g.fillRect(x - 1, y + 3, 9, 3); g.fillRect(x, y + 6, 1, 11); g.fillRect(x + 6, y + 6, 1, 11); g.fillRect(x - 1, y - 1, 9, 4);
+  g.fillStyle = '#9a6a3a'; g.fillRect(x, y + 4, 7, 1); g.fillStyle = '#7a5028'; g.fillRect(x + 1, y + 6, 1, 10); g.fillRect(x + 5, y + 6, 1, 10);
+  g.fillStyle = '#5a3a1e'; for (let i = 0; i < 9; i += 3) { g.fillRect(x + 2 + (i % 2), y + 8 + i, 3, 1); }
+  g.fillStyle = '#6a4a2a'; g.fillRect(x, y, 7, 2); g.fillStyle = '#4a3018'; g.fillRect(x + 1, y - 1, 5, 1);
+  g.fillStyle = '#3a2412'; g.fillRect(x + 3, y - 6, 1, 5); g.fillStyle = FLAGC(h.tower.seat); g.fillRect(x + 4, y - 6, 4, 2);
+}
+
 /* ---------------- drawing each frame ---------------- */
 let sel = null, reachCache = null, mode = null, modeData = null, orders = { units: {}, recruit: [], diplo: null }, hover = null, anim = null, lastFrame = 0, toastT = 0;
 function occupancy() { return E.occupancy({ units: V.units }); }
@@ -140,6 +150,8 @@ function drawFrame(now) {
   for (const id in orders.units) { const u = V.units[id], o = orders.units[id]; if (!u) continue; drawOrder(g, u, o); }
   // units (or the replay)
   if (anim) drawReplay(g, now / 1000); else for (const id in V.units) drawUnit(g, V.units[id], null, now / 1000);
+  // watchtowers stand at the edge of their hex, above any troops there
+  for (const k in V.hexes) { const h = V.hexes[k]; if (!h.tower) continue; const [x0, y0] = hexXY(k); drawTower(g, h, Math.round(x0 + HW / 2), Math.round(y0 + HH / 2)); }
   // recruits ordered
   for (const r of orders.recruit) { const [x0, y0] = hexXY(r.hex); g.fillStyle = 'rgba(255,240,180,0.9)'; g.fillRect(Math.round(x0 + HW / 2 - 4), Math.round(y0 + 3), 8, 1); g.globalAlpha = 0.6; blitUnit(g, r.type, V.me, x0 + HW / 2, y0 + HH / 2 + 2, false, now / 1000); g.globalAlpha = 1; }
   if (sel) { const [x0, y0] = hexXY(sel.at); outlineHex(g, x0, y0, '#ffd84a'); }
@@ -189,7 +201,7 @@ function drawOrder(g, u, o) {
     const [x, y] = hexXY(tgt), B = [x + HW / 2, y + HH / 2]; const col = o.k === 'support' ? FLAGC(o.unit ? V.units[o.unit].seat : o.for) : o.k === 'bombard' ? '#ff8a30' : o.k === 'merge' ? '#8fe08a' : '#9adcff';
     for (let i = 0; i < 1; i += 0.08) { const px = A[0] + (B[0] - A[0]) * i, py = A[1] + (B[1] - A[1]) * i - Math.sin(i * Math.PI) * 6; g.fillStyle = '#17110a'; g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3); g.fillStyle = col; g.fillRect(Math.round(px), Math.round(py), 1, 1); }
   } else {
-    const label = { hold: '', raid: '#c84a2a', dig: '#8a6038', fortify: '#8a8a8a', repair: '#5a8ac8' }[o.k]; if (label) { g.fillStyle = '#17110a'; g.fillRect(Math.round(A[0] + 5), Math.round(A[1] - 11), 5, 5); g.fillStyle = label; g.fillRect(Math.round(A[0] + 6), Math.round(A[1] - 10), 3, 3); }
+    const label = { hold: '', raid: '#c84a2a', dig: '#8a6038', fortify: '#8a8a8a', repair: '#5a8ac8', tower: '#d8b060' }[o.k]; if (label) { g.fillStyle = '#17110a'; g.fillRect(Math.round(A[0] + 5), Math.round(A[1] - 11), 5, 5); g.fillStyle = label; g.fillRect(Math.round(A[0] + 6), Math.round(A[1] - 10), 3, 3); }
   }
 }
 function drawWeather(g, t) {
@@ -329,14 +341,16 @@ function renderUnitPanel() {
   const w = E.weatherAt(V.weather.fronts, u.at);
   p.append(el('div', { class: 'uhead' }, el('b', {}, T.name), ` · strength ${u.str}/10 · ${terr}${h.ent ? ` · dug in ${h.ent}` : ''} · ${E.WEATHER[w].name}`),
     el('div', { class: 'small' }, `Moves ${T.mp} · attack ${T.atk} · defence ${T.def}${T.bombard ? ` · shells ${T.bombard} at 2 hexes` : ''}${u.str < 4 ? ' · shaken' : ''}`),
-    el('div', { class: 'small hint' }, 'Tap a lit hex to march there; a red hex is an attack.'));
+    el('div', { class: 'small hint' }, 'Tap a lit hex to march there; a red hex is an attack.'),
+    u.type === 'eng' && o && o.k === 'tower' ? el('div', { class: 'small hint' }, `A watchtower sees ${E.TOWER.sight} hexes (${E.TOWER.sight + 1} from a hill, ${E.TOWER.fogSight} in fog) and spots troops in woods ${E.TOWER.woodsSpot} hexes off. Any other army ending its month on it burns it, unless you grant them passage; guns can shell it down. You have ${E.towersOf(V, V.me).length} of ${E.TOWER.max}.`) : null);
   const row = el('div', { class: 'row wrap' });
   const b = (label, fn, on) => row.append(el('button', { class: on ? 'on' : '', onclick: fn }, label));
   b('Hold', () => setOrder('hold'), o && o.k === 'hold');
   b('Support…', () => startMode('support'), o && o.k === 'support');
   if (u.type === 'art') b('Bombard…', () => startMode('bombard'), o && o.k === 'bombard');
   if (u.type === 'cav') b('Raid', () => setOrder('raid'), o && o.k === 'raid');
-  if (u.type === 'eng') { b('Dig in', () => setOrder('dig'), o && o.k === 'dig'); if (h.town && h.town.owner === V.me) b('Fortify (2 supply)', () => setOrder('fortify'), o && o.k === 'fortify'); b('Bridge… (3)', () => startMode('bridge'), o && o.k === 'bridge'); if (h.railBroken || nbrs(u.at).some(x => V.hexes[x] && V.hexes[x].railBroken)) b('Repair rail', () => setOrder('repair'), o && o.k === 'repair'); }
+  if (u.type === 'eng') { b('Dig in', () => setOrder('dig'), o && o.k === 'dig'); if (h.town && h.town.owner === V.me) b('Fortify (2 supply)', () => setOrder('fortify'), o && o.k === 'fortify'); b('Bridge… (3)', () => startMode('bridge'), o && o.k === 'bridge'); if (h.railBroken || nbrs(u.at).some(x => V.hexes[x] && V.hexes[x].railBroken)) b('Repair rail', () => setOrder('repair'), o && o.k === 'repair');
+    if (!h.town && h.t !== 'water' && !h.tower) { const mine = E.towersOf(V, V.me).length + Object.entries(orders.units).filter(([id, x]) => x.k === 'tower' && id !== u.id && V.units[id]).length; if (mine < E.TOWER.max) b(`Watchtower (${E.TOWER.cost} supply)`, () => setOrder('tower'), o && o.k === 'tower'); } }
   const partner = u.type !== 'gen' && u.str < 10 && nbrs(u.at).some(x => { const v = occupancy()[x]; return v && v.seat === V.me && v.type === u.type && v.str < 10; });
   if (partner) b('Merge…', () => startMode('merge'), o && o.k === 'merge');
   if (o) b('Clear order', () => setOrder('clear'));
@@ -376,12 +390,13 @@ function supplyCheck() {
   const me = V.seats[V.me]; if (!me || me.sup === undefined || V.over) return null;
   const inc = E.incomeOf(V, V.me), occ = occupancy(), fronts = V.weather.fronts;
   let works = 0, upChange = 0; const hungry = [];
-  const gifts = ((orders.diplo && orders.diplo.gift) || []).reduce((t, g) => t + (g.sup || 0), 0);
+  const gifts = ((orders.diplo && orders.diplo.gift) || []).reduce((t, g) => t + (g.sup || 0), 0) + dealCost();
   const recruits = orders.recruit.reduce((t, r) => t + E.UNIT[r.type].sup, 0);
   for (const u of Object.values(V.units)) {
     if (u.seat !== V.me) continue; const o = orders.units[u.id];
     if (o && o.k === 'fortify') { const h = V.hexes[u.at]; if (h.town && h.town.owner === V.me && h.town.fort < 3) works += 2; }
     if (o && o.k === 'bridge') works += 3;
+    if (o && o.k === 'tower') works += E.TOWER.cost;
     if (o && o.k === 'merge') { upChange -= E.UNIT[u.type].up; continue; }
     let end = u.at;
     if (o && o.k === 'move') { const p = o.path; end = p[p.length - 1]; if (occ[end] && occ[end].seat !== V.me) end = p.length > 1 ? p[p.length - 2] : u.at; }
@@ -399,7 +414,7 @@ function supplyBox(full) {
   const starving = c.afterUpkeep < 0, short = !starving && c.afterRecruits < 0;
   if (!full && !starving && !short && !c.hungry.length) return null;
   const box = el('div', { class: 'warnbox' + (starving || c.hungry.length ? ' bad' : '') });
-  box.append(el('div', {}, el('b', {}, 'Supply this month: '), `+${c.inc.sup} income − ${c.up} upkeep${c.works ? ` − ${c.works} works` : ''}${c.gifts ? ` − ${c.gifts} gifts` : ''} → ${c.afterUpkeep} in hand${c.recruits ? `, ${c.afterRecruits} after recruits` : ''}.`));
+  box.append(el('div', {}, el('b', {}, 'Supply this month: '), `+${c.inc.sup} income − ${c.up} upkeep${c.works ? ` − ${c.works} works` : ''}${c.gifts ? ` − ${c.gifts} gifts and deals` : ''} → ${c.afterUpkeep} in hand${c.recruits ? `, ${c.afterRecruits} after recruits` : ''}.`));
   if (starving) box.append(el('div', {}, '⚠ Not enough to feed the army: every unit will lose 1 strength. Order fewer works or gifts, merge units, or take a town.'));
   else if (short) box.append(el('div', {}, '⚠ Not enough left for every recruit you have ordered: some will not be raised.'));
   for (const h of c.hungry) box.append(el('div', { class: 'oline', onclick: () => { select(h.u); centerOn(h.u.at); } }, `⚠ ${h.detachment ? 'The detachment left by ' : ''}${E.UNIT[h.u.type].name} (${h.u.str}) ${h.end === h.u.at ? (V.hexes[h.end].town ? 'at ' : '') : 'marching to '}${hexLabel(h.end)} will be out of supply: −${h.loss}${h.loss > 1 ? ' in the snow' : ''}.`));
@@ -407,12 +422,14 @@ function supplyBox(full) {
   if (full) box.append(el('div', { class: 'small' }, 'Worked out from your orders and the towns you hold now; a town taken or lost this month changes it.'));
   return box;
 }
+// supply this month's accepted deals will cost (what we give, plus the mediator's fee); offers we make cost nothing until accepted
+function dealCost() { const acc = (orders.diplo && orders.diplo.accept) || []; return (V.deals || []).filter(x => x.status === 'open' && x.to === V.me && acc.includes(x.id)).reduce((t, x) => t + x.get.sup + E.DEAL.fee, 0); }
 function armySize() { return Object.values(V.units).filter(u => u.seat === V.me && u.type !== 'gen').length + orders.recruit.filter(r => r.type !== 'gen').length + Object.entries(orders.units).filter(([id, o]) => V.units[id] && o.k === 'move' && o.detach).length; }
 function capOf() { let c = 4; for (const k in V.hexes) { const t = V.hexes[k].town; if (t && t.owner === V.me) c += E.KIND[t.kind].cap; } return c; }
 function describeHex(k) {
   const h = V.hexes[k], w = E.weatherAt(V.weather.fronts, k), u = occupancy()[k];
   const bits = [h.town ? `${h.town.name} (${E.KIND[h.town.kind].name}, ${h.town.owner === E.NEUTRAL ? 'held by militia' : 'held by ' + seatName(h.town.owner)}${h.town.fort ? ', fort ' + h.town.fort : ''})` : h.t === 'water' ? (h.bridge ? 'Bridge' : h.ford ? 'Ford (impassable in rain)' : 'River') : E.TER[h.t].name];
-  if (h.farm) bits.push(h.farm.burned > 0 ? 'burned farm' : 'farm'); if (h.rail) bits.push(h.railBroken ? 'broken railway' : 'railway'); if (h.road) bits.push('road'); if (h.ent) bits.push('earthworks ' + h.ent);
+  if (h.farm) bits.push(h.farm.burned > 0 ? 'burned farm' : 'farm'); if (h.rail) bits.push(h.railBroken ? 'broken railway' : 'railway'); if (h.road) bits.push('road'); if (h.ent) bits.push('earthworks ' + h.ent); if (h.tower) bits.push(`${seatName(h.tower.seat)} watchtower`);
   bits.push(E.WEATHER[w].name.toLowerCase());
   if (u) bits.push(`${seatName(u.seat)} ${E.UNIT[u.type].name.toLowerCase()} (${u.str})`);
   setStatus(bits.join(' · ')); clearTimeout(toastT); toastT = setTimeout(() => setStatus(''), 4000);
@@ -465,25 +482,7 @@ function renderSide() {
       el('button', { class: 'primary', onclick: submit }, V.deadline ? (V.myOrders && !dirty ? 'Orders sent ✓ — send again' : 'Send my orders') : 'Fight the month'),
       el('div', { class: 'small' }, V.deadline ? 'You can change your orders until the turn resolves. It resolves at the deadline, or as soon as every general has sent orders.' : 'The computer generals move at the same time as you.')));
   }
-  if (tab === 'armies') {
-    body.append(el('p', { class: 'small' }, 'Deals are made on WhatsApp. Here you decide what you actually do. Changes take effect when the turn resolves.'));
-    const d = orders.diplo || (orders.diplo = { sight: V.rel.sight[V.me].slice(), passage: V.rel.passage[V.me].slice(), gift: [] });
-    for (const o of V.seats) {
-      if (o.seat === V.me) continue;
-      const theyShare = V.rel.sight[o.seat][V.me], theyPass = V.rel.passage[o.seat][V.me];
-      const box = el('div', { class: 'army-card', style: `--c:${E.COLORS[o.seat].ui}` },
-        el('div', { class: 'ah' }, el('b', {}, o.name || E.COLORS[o.seat].name), o.bot ? ' (computer)' : '', o.alive ? ` · ${o.towns} towns · ${o.score} VP` : ' · out of the war'),
-        el('div', { class: 'small' }, `They ${theyShare ? 'share' : 'do not share'} their scouts' reports with you and ${theyPass ? 'grant' : 'do not grant'} you free passage.`));
-      if (o.alive) {
-        box.append(el('label', { class: 'chk' }, el('input', { type: 'checkbox', ...(d.sight[o.seat] ? { checked: 'checked' } : {}), onchange: e => { d.sight[o.seat] = e.target.checked; changed(); } }), ' Share what my scouts see'),
-          el('label', { class: 'chk' }, el('input', { type: 'checkbox', ...(d.passage[o.seat] ? { checked: 'checked' } : {}), onchange: e => { d.passage[o.seat] = e.target.checked; changed(); } }), ' Grant free passage (their troops ignore mine when marching)'));
-        const g = d.gift.find(x => x.to === o.seat) || { to: o.seat, men: 0, sup: 0 };
-        const inp = (f, max) => el('input', { type: 'number', min: 0, max, value: g[f] || 0, oninput: e => { g[f] = Math.max(0, Math.min(max, e.target.value | 0)); d.gift = d.gift.filter(x => x.to !== o.seat); if (g.men || g.sup) d.gift.push(g); changed(); } });
-        box.append(el('div', { class: 'gift' }, 'Send ', inp('men', me.men), ' recruits and ', inp('sup', me.sup), ' supply'));
-      }
-      body.append(box);
-    }
-  }
+  if (tab === 'armies') renderArmies(body, me);
   if (tab === 'aims') {
     const modeText = { points: 'Victory points: towns 1, headquarters 2, the Capital 4. Holding more than half of all towns ends the war at once.', capital: 'Take the Capital: whoever holds it for four months in a row wins. Otherwise victory points decide.', conquest: 'Last army standing. Otherwise victory points decide.' }[V.mode];
     body.append(el('h4', {}, 'How the war is won'), el('p', { class: 'small' }, `${modeText} The war ends after turn ${V.turnLimit} (${E.dateOf(V, V.turnLimit).label}).`));
@@ -500,6 +499,65 @@ function renderSide() {
   }
   if (tab === 'help') body.append(el('div', { class: 'small rules', html: RULES }));
 }
+function dipl() { const d = orders.diplo || (orders.diplo = { sight: V.rel.sight[V.me].slice(), passage: V.rel.passage[V.me].slice(), gift: [] }); for (const f of ['offer', 'accept', 'decline', 'withdraw']) if (!Array.isArray(d[f])) d[f] = []; return d; }
+function lockLine(l) { return l.until <= V.turn ? `runs out after this month; it can be withdrawn now` : `fixed until the orders for ${E.dateOf(V, l.until).label}`; }
+function renderArmies(body, me) {
+  body.append(el('p', { class: 'small' }, 'A handshake is free, but nothing makes the other side keep its word. A binding deal is carried out by the mediator: both sides hand over at the same moment, or nothing happens, and each pays him ' + E.DEAL.fee + ' supply. Changes take effect when the turn resolves.'));
+  const d = dipl();
+  const offers = (V.deals || []).filter(x => x.status === 'open');
+  for (const o of V.seats) {
+    if (o.seat === V.me) continue;
+    const theyShare = V.rel.sight[o.seat][V.me], theyPass = V.rel.passage[o.seat][V.me];
+    const lockS = E.lockFor(V, 'sight', V.me, o.seat, V.turn + 1), lockP = E.lockFor(V, 'passage', V.me, o.seat, V.turn + 1);
+    const theirS = E.lockFor(V, 'sight', o.seat, V.me, V.turn), theirP = E.lockFor(V, 'passage', o.seat, V.me, V.turn);
+    const box = el('div', { class: 'army-card', style: `--c:${E.COLORS[o.seat].ui}` },
+      el('div', { class: 'ah' }, el('b', {}, o.name || E.COLORS[o.seat].name), o.bot ? ' (computer)' : '', o.alive ? ` · ${o.towns} towns · ${o.score} VP` : ' · out of the war'),
+      el('div', { class: 'small' }, `They ${theyShare ? 'share' : 'do not share'} their scouts' reports with you${theirS ? ` (bound by deal: ${lockLine(theirS)})` : ''} and ${theyPass ? 'grant' : 'do not grant'} you free passage${theirP ? ` (bound by deal: ${lockLine(theirP)})` : ''}.`));
+    if (o.alive) {
+      const chk = (kind, label, lock) => el('label', { class: 'chk' + (lock ? ' locked' : '') }, el('input', { type: 'checkbox', ...(d[kind][o.seat] || lock ? { checked: 'checked' } : {}), ...(lock ? { disabled: 'disabled' } : {}), onchange: e => { d[kind][o.seat] = e.target.checked; changed(); } }), ` ${label}${lock ? ` — bound by deal, ${lockLine(lock)}` : ''}`);
+      box.append(chk('sight', 'Share what my scouts see', lockS), chk('passage', 'Grant free passage (their troops ignore mine when marching)', lockP));
+      const g = d.gift.find(x => x.to === o.seat) || { to: o.seat, men: 0, sup: 0 };
+      const inp = (f, max) => el('input', { type: 'number', min: 0, max, value: g[f] || 0, oninput: e => { g[f] = Math.max(0, Math.min(max, e.target.value | 0)); d.gift = d.gift.filter(x => x.to !== o.seat); if (g.men || g.sup) d.gift.push(g); changed(); } });
+      box.append(el('div', { class: 'gift' }, el('b', {}, 'Handshake: '), 'send ', inp('men', me.men), ' recruits and ', inp('sup', me.sup), ' supply'));
+      // offers they have made to me
+      for (const x of offers.filter(x => x.from === o.seat && x.to === V.me)) {
+        const st = d.accept.includes(x.id) ? 'accept' : d.decline.includes(x.id) ? 'decline' : null;
+        const set = v => { d.accept = d.accept.filter(i => i !== x.id); d.decline = d.decline.filter(i => i !== x.id); if (v) d[v].push(x.id); changed(); };
+        box.append(el('div', { class: 'deal in' }, el('div', {}, el('b', {}, 'Binding deal offered: '), `they give ${E.dealText(x.give)}; you give ${E.dealText(x.get)}. Fee ${E.DEAL.fee} supply each. Answer this month or it lapses.`),
+          el('div', { class: 'row wrap' }, el('button', { class: st === 'accept' ? 'on' : '', onclick: () => set(st === 'accept' ? null : 'accept') }, 'Accept'), el('button', { class: st === 'decline' ? 'on' : '', onclick: () => set(st === 'decline' ? null : 'decline') }, 'Turn down'))));
+      }
+      // offers I made to them, still waiting
+      for (const x of offers.filter(x => x.from === V.me && x.to === o.seat)) {
+        const w = d.withdraw.includes(x.id);
+        box.append(el('div', { class: 'deal out' }, el('div', {}, el('b', {}, 'Your offer, waiting for an answer: '), `you give ${E.dealText(x.give)}; they give ${E.dealText(x.get)}.`),
+          el('div', { class: 'row wrap' }, el('button', { class: w ? 'on' : '', onclick: () => { d.withdraw = w ? d.withdraw.filter(i => i !== x.id) : d.withdraw.concat(x.id); changed(); } }, w ? 'Withdrawing ✓' : 'Withdraw it'))));
+      }
+      // offers I am drafting this month
+      d.offer.forEach((f, i) => { if (f.to !== o.seat) return; box.append(el('div', { class: 'deal draft' }, el('div', {}, el('b', {}, 'Offer to send with your orders: '), `you give ${E.dealText(f.give)}; they give ${E.dealText(f.get)}.`), el('div', { class: 'row wrap' }, el('button', { onclick: () => dealComposer(o, i) }, 'Change'), el('button', { onclick: () => { d.offer.splice(i, 1); changed(); } }, 'Remove')))); });
+      if (d.offer.length < E.DEAL.maxOffers) box.append(el('button', { class: 'ghost', style: 'margin-top:6px', onclick: () => dealComposer(o) }, 'Propose a binding deal…'));
+    }
+    body.append(box);
+  }
+  // sealed deals still running
+  const run = (V.locks || []).filter(l => l.until >= V.turn);
+  if (run.length) body.append(el('h4', {}, 'Bound by deal'), el('ul', { class: 'news' }, ...run.map(l => el('li', {}, `${seatName(l.from)} ${l.kind === 'sight' ? 'shares scouts\' reports with' : 'grants free passage to'} ${seatName(l.to)}: ${lockLine(l)}.`))));
+}
+function dealComposer(o, idx) {
+  const d = dipl(), me = V.seats[V.me];
+  const blank = () => ({ men: 0, sup: 0, sight: 0, passage: 0 });
+  const f = idx === undefined ? { to: o.seat, give: blank(), get: blank() } : JSON.parse(JSON.stringify(d.offer[idx]));
+  const num = (side, k, max) => el('input', { type: 'number', min: 0, max, value: f[side][k] || 0, oninput: e => { f[side][k] = Math.max(0, Math.min(max, e.target.value | 0)); } });
+  const side = (title, key) => el('div', { class: 'dealside' }, el('b', {}, title),
+    el('div', { class: 'gift' }, num(key, 'men', 99), ' recruits'), el('div', { class: 'gift' }, num(key, 'sup', 99), ' supply'),
+    el('div', { class: 'gift' }, num(key, 'sight', E.DEAL.maxMonths), ' months of scouts\' reports'), el('div', { class: 'gift' }, num(key, 'passage', E.DEAL.maxMonths), ' months of free passage'));
+  const box = el('div', { class: 'modal' }, el('h3', {}, `A binding deal with ${o.name || E.COLORS[o.seat].name}`),
+    el('p', {}, `They see it next month and can accept or turn it down. If they accept, the mediator makes both sides hand over at once and charges each ${E.DEAL.fee} supply. If either side cannot pay on the day, the deal falls through and nobody pays. Shared reports and passage in the deal cannot be withdrawn until they run out.`),
+    el('div', { class: 'dealsides' }, side('You give', 'give'), side('They give', 'get')),
+    el('p', { class: 'small' }, `You have ${me.men} recruits and ${me.sup} supply now. Nothing leaves your hands until they accept.`));
+  const err = el('div', { class: 'small', style: 'color:var(--blood)' });
+  box.append(err, el('button', { class: 'primary', onclick: () => { const e = t => !t.men && !t.sup && !t.sight && !t.passage; if (e(f.give) && e(f.get)) { err.textContent = 'Put something in the deal first.'; return; } if (idx === undefined) d.offer.push(f); else d.offer[idx] = f; changed(); closeModal(); } }, idx === undefined ? 'Send with my orders' : 'Keep these terms'), el('button', { class: 'ghost', style: 'width:100%;margin-top:6px', onclick: closeModal }, 'Cancel'));
+  showModal(box);
+}
 const RULES = `
 <p><b>Every month</b> all generals give orders in secret. When the turn resolves, everything happens at once: marches, then shelling, then battles.</p>
 <p><b>Marching.</b> Tap a unit, then a lit hex. Roads and railways are fast, woods and hills slow, rivers only cross at bridges and fords. Coming next to an enemy stops a march.</p>
@@ -507,8 +565,8 @@ const RULES = `
 <p><b>Support.</b> Tap Support…, then tap a unit next to yours (guns: within 2) — your own or another army's. You add to that unit's attack wherever it attacks, or to its defence if it is attacked, as long as you are still next to it when it fights. Being attacked yourself cancels your support. This is how alliances fight together — and how they break: back the defender instead of the ally who asked.</p>
 <p><b>Recruits and supply.</b> Towns give recruits and supply; farms and railways add supply. Every unit eats supply each month. Units more than four hexes from your towns, and off your railways, are out of supply and lose men — twice as fast in snow. Units in supply that did not fight regain strength each month (1 supply in a town, 2 in the field). Your army can be no larger than your towns allow: 4, plus 1 per town, 4 for headquarters and 3 for the Capital.</p>
 <p><b>Weather</b> drifts across the map in fronts. Rain makes mud, floods fords and keeps guns to the roads. Fog blinds scouts and artillery. Heat wears out long marches. The forecast for next month is usually right; the one after is often wrong.</p>
-<p><b>Diplomacy.</b> Share your scouts' reports, grant free passage, or send recruits and supply to another army. Any of it can be withdrawn next month.</p>
-<p><b>Cavalry</b> raid railways and farms. <b>Engineers</b> dig earthworks, fortify towns, bridge rivers and mend railways. A <b>general</b> makes the units around him fight 15% better.</p>
+<p><b>Diplomacy.</b> Share your scouts' reports, grant free passage, or send recruits and supply to another army. A <i>handshake</i> costs nothing and can be withdrawn next month, and nothing makes the other side keep its word. A <i>binding deal</i> is offered one month and answered the next: if accepted, both sides hand over at the same moment and each pays the mediator 1 supply. If either side cannot pay, it falls through and nobody pays. Reports and passage promised in a deal are locked on for the months agreed.</p>
+<p><b>Cavalry</b> raid railways and farms. <b>Engineers</b> dig earthworks, fortify towns, bridge rivers, mend railways and build <b>watchtowers</b> (3 supply, outside towns, 4 per army): a tower sees 3 hexes (4 from a hill, 2 in fog), spots troops in woods 2 hexes off and reports troops coming into view. Another army ending its month on it burns it, unless you grant them passage; guns can shell it down. A <b>general</b> makes the units around him fight 15% better.</p>
 <p><b>Merging and garrisons.</b> Two weak units of the same kind standing side by side can merge: tap one, press Merge…, then tap the other (up to strength 10). To leave a garrison, give a unit a march, tap it again and choose how many men stay behind.</p>
 <p><b>Hunger.</b> The Orders tab warns before you send orders if your supply will not cover upkeep, or if a unit will end the month out of supply (marked ! on the map).</p>`;
 function supportPlan(u, o) {
@@ -524,7 +582,7 @@ function supportPlan(u, o) {
   if (t.seat === V.me) return { text: `back ${name} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)}`, warn: 'it has no attack ordered, so this only helps if it is attacked' };
   return { text: `back ${name} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)} in any attack it makes, or its defence` };
 }
-function describeOrder(o, u) { if (!o) return 'hold'; if (o.k === 'support' && o.unit && u) { const s = supportPlan(u, o); return s.text + (s.warn ? ` — ⚠ ${s.warn}` : ''); } if (o.k === 'merge') { const t = V.units[o.into]; return t ? `merge into the ${E.UNIT[t.type].name.toLowerCase()} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)} (${t.str})` : 'merge'; } if (o.k === 'move' && o.detach) return describeOrder({ k: 'move', path: o.path }) + `, leaving ${o.detach} behind`; if (o.k === 'move') { const last = o.path[o.path.length - 1], occ = occupancy()[last], where = hexLabel(last), town = !!V.hexes[last].town; return occ && occ.seat !== V.me ? `attack ${town ? '' : 'the enemy '}${where}` : town ? `march to ${where}` : `march ${where}`; } if (o.k === 'support') return `support ${o.for === V.me ? 'my army' : seatName(o.for)} ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bombard') return `shell the enemy ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bridge') return 'build a bridge'; return { hold: 'hold', raid: 'raid', dig: 'dig earthworks', fortify: 'fortify the town', repair: 'repair the railway' }[o.k] || o.k; }
+function describeOrder(o, u) { if (!o) return 'hold'; if (o.k === 'support' && o.unit && u) { const s = supportPlan(u, o); return s.text + (s.warn ? ` — ⚠ ${s.warn}` : ''); } if (o.k === 'merge') { const t = V.units[o.into]; return t ? `merge into the ${E.UNIT[t.type].name.toLowerCase()} ${V.hexes[t.at].town ? 'at ' : ''}${hexLabel(t.at)} (${t.str})` : 'merge'; } if (o.k === 'move' && o.detach) return describeOrder({ k: 'move', path: o.path }) + `, leaving ${o.detach} behind`; if (o.k === 'move') { const last = o.path[o.path.length - 1], occ = occupancy()[last], where = hexLabel(last), town = !!V.hexes[last].town; return occ && occ.seat !== V.me ? `attack ${town ? '' : 'the enemy '}${where}` : town ? `march to ${where}` : `march ${where}`; } if (o.k === 'support') return `support ${o.for === V.me ? 'my army' : seatName(o.for)} ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bombard') return `shell the enemy ${V.hexes[o.hex].town ? 'at ' : ''}${hexLabel(o.hex)}`; if (o.k === 'bridge') return 'build a bridge'; return { hold: 'hold', raid: 'raid', dig: 'dig earthworks', fortify: 'fortify the town', repair: 'repair the railway', tower: 'build a watchtower' }[o.k] || o.k; }
 function hexLabel(k) { const h = V.hexes[k]; if (h.town) return h.town.name; let best = null, bd = 99; for (const x in V.hexes) if (V.hexes[x].town) { const d = hdist(x, k); if (d < bd) { bd = d; best = x; } } return `near ${V.hexes[best].town.name}`; }
 function centerOn(k) { const [x, y] = hexXY(k); view.x = x + HW / 2; view.y = y + HH / 2; }
 function renderOver() {

@@ -21,6 +21,7 @@
       <div class="field"><span>Woods and hills</span><div class="seg" data-k="terrain"></div></div>
       <div class="field"><span>Towns</span><div class="seg" data-k="towns"></div></div>
       <div class="field"><span>Rivers</span><div class="seg" data-k="rivers"></div></div>
+      <div class="field"><span>Each army's land</span><div class="seg" data-k="layout"></div></div>
       <div class="field"><span>Victory</span><div class="seg" data-k="mode"></div></div>
       <div class="field"><span>Length</span><div class="seg" data-k="turnLimit"></div></div>
       <div class="field"><span>A turn every</span><div class="seg" data-k="hours"></div></div>
@@ -47,11 +48,11 @@
 <script>
 const OPTS = {
   seats: [[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']], humans: [[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']],
-  mapSize: [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], terrain: [['light', 'Light'], ['normal', 'Normal'], ['heavy', 'Heavy']], towns: [['few', 'Few'], ['normal', 'Normal'], ['many', 'Many']], rivers: [[0, 'None'], [1, 'One'], [2, 'Two']],
+  mapSize: [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], terrain: [['light', 'Light'], ['normal', 'Normal'], ['heavy', 'Heavy']], towns: [['few', 'Few'], ['normal', 'Normal'], ['many', 'Many']], rivers: [[0, 'None'], [1, 'One'], [2, 'Two']], layout: [['matched', 'Matched, each different'], ['mirror', 'Mirror copies']],
   mode: [['points', 'Victory points'], ['capital', 'Take the Capital'], ['conquest', 'Last army standing']], turnLimit: [[20, '20 months'], [30, '30 months'], [40, '40 months']],
   hours: [[1, '1 hour'], [6, '6 hours'], [12, '12 hours'], [24, 'Day']]
 };
-const pick = { seats: 4, humans: 4, mapSize: 'normal', terrain: 'normal', towns: 'normal', rivers: 1, mode: 'points', turnLimit: 30, hours: 12 };
+const pick = { seats: 4, humans: 4, mapSize: 'normal', terrain: 'normal', towns: 'normal', rivers: 1, layout: 'matched', mode: 'points', turnLimit: 30, hours: 12 };
 function render() {
   document.querySelectorAll('.seg').forEach(seg => {
     const k = seg.dataset.k; seg.innerHTML = '';
