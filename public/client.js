@@ -342,7 +342,7 @@ function renderUnitPanel() {
   p.append(el('div', { class: 'uhead' }, el('b', {}, T.name), ` · strength ${u.str}/10 · ${terr}${h.ent ? ` · dug in ${h.ent}` : ''} · ${E.WEATHER[w].name}`),
     el('div', { class: 'small' }, `Moves ${T.mp} · attack ${T.atk} · defence ${T.def}${T.bombard ? ` · shells ${T.bombard} at 2 hexes` : ''}${u.str < 4 ? ' · shaken' : ''}`),
     el('div', { class: 'small hint' }, 'Tap a lit hex to march there; a red hex is an attack.'),
-    u.type === 'eng' && o && o.k === 'tower' ? el('div', { class: 'small hint' }, `A watchtower sees ${E.TOWER.sight} hexes (${E.TOWER.sight + 1} from a hill, ${E.TOWER.fogSight} in fog) and spots troops in woods ${E.TOWER.woodsSpot} hexes off. Any other army ending its month on it burns it, unless you grant them passage; guns can shell it down. You have ${E.towersOf(V, V.me).length} of ${E.TOWER.max}.`) : null);
+    ...(u.type === 'eng' && o && o.k === 'tower' ? [el('div', { class: 'small hint' }, `A watchtower sees ${E.TOWER.sight} hexes (${E.TOWER.sight + 1} from a hill, ${E.TOWER.fogSight} in fog) and spots troops in woods ${E.TOWER.woodsSpot} hexes off. Any other army ending its month on it burns it, unless you grant them passage; guns can shell it down. You have ${E.towersOf(V, V.me).length} of ${E.TOWER.max}.`)] : []));
   const row = el('div', { class: 'row wrap' });
   const b = (label, fn, on) => row.append(el('button', { class: on ? 'on' : '', onclick: fn }, label));
   b('Hold', () => setOrder('hold'), o && o.k === 'hold');
@@ -376,7 +376,7 @@ function openRecruit(k) {
     const T = E.UNIT[t], townOnly = h.town.kind === 'town' && (t === 'art' || t === 'eng' || t === 'gen'), genBad = t === 'gen' && (hasGen || h.town.kind !== 'hq');
     const afford = me.men - spent.men + (queued ? E.UNIT[queued.type].men : 0) >= T.men && me.sup - spent.sup + (queued ? E.UNIT[queued.type].sup : 0) >= T.sup;
     const ok = !townOnly && !genBad && afford && (t === 'gen' || units - (queued && queued.type !== 'gen' ? 1 : 0) < cap);
-    row.append(el('button', { class: queued && queued.type === t ? 'on' : '', disabled: ok ? null : 'disabled', onclick: () => { orders.recruit = orders.recruit.filter(r => r.hex !== k); orders.recruit.push({ hex: k, type: t }); changed(); closeRecruit(); } }, `${T.name} (${T.men} men, ${T.sup} supply)`));
+    row.append(el('button', { class: queued && queued.type === t ? 'on' : '', disabled: ok ? null : 'disabled', onclick: () => { orders.recruit = orders.recruit.filter(r => r.hex !== k); orders.recruit.push({ hex: k, type: t }); changed(); closeRecruit(); } }, el('span', { title: `${T.men} recruits and ${T.sup} supply` }, `${T.name} · ${T.men}👥 ${T.sup}📦`)));
   }
   if (queued) row.append(el('button', { onclick: () => { orders.recruit = orders.recruit.filter(r => r.hex !== k); changed(); closeRecruit(); } }, 'Cancel recruit'));
   row.append(el('button', { onclick: closeRecruit }, 'Close'));

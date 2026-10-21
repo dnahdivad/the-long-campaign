@@ -29,7 +29,7 @@
         join: async () => { },
         submit: async (orders) => { const o = { 0: E.cleanOrders(state, 0, orders) }; E.resolve(state, o); save(); return view(); }
       });
-      const b = document.createElement('button'); b.textContent = 'New war'; b.style.cssText = 'position:absolute;left:10px;top:30px;z-index:2;padding:4px 9px;font-size:13px'; b.onclick = () => { if (confirm('Abandon this war and start a new one?')) { try { localStorage.removeItem(KEY); } catch (e) { } location.reload(); } };
+      const b = document.createElement('button'); b.textContent = 'New war'; b.style.cssText = 'position:absolute;left:10px;top:30px;z-index:1;padding:4px 9px;font-size:13px'; b.onclick = () => { if (confirm('Abandon this war and start a new one?')) { try { localStorage.removeItem(KEY); } catch (e) { } location.reload(); } };
       document.getElementById('mapwrap').append(b);
     });
   };

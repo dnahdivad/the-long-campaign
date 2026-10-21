@@ -112,3 +112,29 @@ button.army { border-left: 8px solid var(--c); }
 .dealsides { display: flex; gap: 12px; flex-wrap: wrap; margin: 6px 0 4px; }
 .dealside { flex: 1 1 160px; }
 .dealside input, .gift input { width: 4.2em; }
+
+/* panels sit above the map's own buttons */
+#unitpanel, #recruit { z-index: 3; }
+.modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+/* phones: tighter panels, smaller buttons, recruit choices two to a row */
+@media (max-width: 820px) {
+  #top { padding: 4px 8px; }
+  #top .title b { font-size: 16px; margin-right: 6px; }
+  #top .date { font-size: 12px; }
+  #top .res { font-size: 14px; gap: 9px; }
+  .wxchip { padding: 2px 5px; font-size: 12px; }
+  .pdot { width: 18px; height: 18px; font-size: 10px; }
+  .tabs button { padding: 4px 6px; font-size: 13px; }
+  .tabbody { padding: 8px 10px 14px; }
+  #unitpanel, #recruit { left: 6px; right: 6px; bottom: 6px; padding: 6px 8px; max-height: 72%; overflow-y: auto; }
+  #unitpanel .uhead, #recruit .uhead { font-size: 15px; }
+  #unitpanel .small, #recruit .small { font-size: 12.5px; }
+  #unitpanel .row, #recruit .row { gap: 4px; }
+  #unitpanel .row button, #recruit .row button { padding: 5px 8px; font-size: 13.5px; }
+  #recruit .row { display: grid; grid-template-columns: 1fr 1fr; }
+  #recruit .row button { width: 100%; }
+  .modal { padding: 12px 14px; }
+  .modal h3 { font-size: 19px; }
+  .modal p { font-size: 14px; }
+  .zoom button { width: 32px; height: 32px; font-size: 17px; }
+}
