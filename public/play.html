@@ -29,7 +29,11 @@ TLC.boot({
   load: () => call(''),
   status: () => call('/status'),
   join: (name, email) => call('/join', { name, email }),
-  submit: (orders, turn) => call('/orders', { orders, turn })
+  submit: (orders, turn) => call('/orders', { orders, turn }),
+  letters: () => call('/letters'),
+  sendLetter: (to, text) => call('/letters', { to, text }),
+  notes: () => call('/notes'),
+  saveNotes: text => call('/notes', { text })
 });
 </script>
 </body></html>

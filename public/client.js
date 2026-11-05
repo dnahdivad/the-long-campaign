@@ -465,7 +465,9 @@ let tab = 'orders';
 function renderSide() {
   renderTop();
   const s = $('#side'); s.innerHTML = '';
-  const tabs = el('div', { class: 'tabs' }, ...[['orders', 'Orders'], ['armies', 'Armies'], ['aims', 'War aims'], ['news', 'Dispatches'], ['help', 'Rules']].map(([k, t]) => el('button', { class: tab === k ? 'on' : '', onclick: () => { tab = k; renderSide(); } }, t)));
+  const tabList = [['orders', 'Orders'], ['armies', 'Armies'], ...(api && api.letters ? [['letters', 'Letters']] : []), ['aims', 'War aims'], ['news', 'Dispatches'], ['help', 'Rules']];
+  if (tab === 'letters') { if (renderLetters.seen == null) renderLetters.seen = letSeen(); markLettersRead(); } else renderLetters.seen = null;
+  const tabs = el('div', { class: 'tabs' }, ...tabList.map(([k, t]) => el('button', { class: tab === k ? 'on' : '', onclick: () => { tab = k; renderSide(); } }, t, k === 'letters' && unreadLetters() ? el('span', { class: 'dot', title: 'New letters' }) : null)));
   s.append(tabs);
   const body = el('div', { class: 'tabbody' }); s.append(body);
   const me = V.seats[V.me];
@@ -498,6 +500,49 @@ function renderSide() {
     for (const t of Object.keys(byTurn).sort((a, b) => b - a).slice(0, 8)) body.append(el('h4', {}, +t === 0 ? 'The outbreak' : E.dateOf(V, +t).label), el('ul', { class: 'news' }, ...byTurn[t].map(x => el('li', {}, x))));
   }
   if (tab === 'help') body.append(el('div', { class: 'small rules', html: RULES }));
+  if (tab === 'letters') renderLetters(body);
+}
+/* ---------------- letters between armies, and a private notebook ---------------- */
+let LET = null, NOTE = null, letterDraft = { to: 'all', text: '' };
+const letKey = () => 'tlc-letters-' + (V.id || 'local') + '-' + V.me;
+const letSeen = () => { try { return +localStorage.getItem(letKey()) || 0; } catch (e) { return 0; } };
+const lastLetterId = () => LET && LET.length ? LET[LET.length - 1].id : 0;
+function unreadLetters() { return !!LET && LET.some(l => l.from !== V.me && l.id > letSeen()); }
+function markLettersRead() { if (!LET) return; try { localStorage.setItem(letKey(), lastLetterId()); } catch (e) { } }
+async function loadLetters() { if (!api.letters) return; try { const j = await api.letters(); LET = j.letters || []; renderSide(); } catch (e) { } }
+function renderLetters(body) {
+  const others = V.seats.filter(s => s.seat !== V.me && !s.bot);
+  body.append(el('p', { class: 'small' }, 'Letters go straight to the other generals. Each is marked with the army that sent it; nobody can write in another army\'s name. Plain words only.'));
+  if (others.length) {
+    const to = el('select', { onchange: e => { letterDraft.to = e.target.value === 'all' ? 'all' : +e.target.value; } },
+      el('option', { value: 'all', ...(letterDraft.to === 'all' ? { selected: 'selected' } : {}) }, 'Every army'),
+      ...others.map(o => el('option', { value: o.seat, ...(letterDraft.to === o.seat ? { selected: 'selected' } : {}) }, o.name || E.COLORS[o.seat].name)));
+    const ta = el('textarea', { class: 'letterbox', maxlength: 1000, rows: 4, placeholder: 'Write your letter…', oninput: e => { letterDraft.text = e.target.value; } }); ta.value = letterDraft.text;
+    const sendBtn = el('button', { class: 'primary', onclick: async () => {
+      if (!letterDraft.text.trim()) return setStatus('The letter is blank.');
+      sendBtn.disabled = true;
+      try { const j = await api.sendLetter(letterDraft.to, letterDraft.text); LET = j.letters || LET; letterDraft.text = ''; markLettersRead(); setStatus('Letter sent.'); renderSide(); }
+      catch (e) { setStatus(e.message); sendBtn.disabled = false; }
+    } }, 'Send letter');
+    body.append(el('div', { class: 'compose' }, el('label', { class: 'small' }, 'To: ', to), ta, sendBtn));
+  } else body.append(el('p', { class: 'small' }, 'There are no other human generals to write to.'));
+  const list = (LET || []).slice().reverse();
+  body.append(el('h4', {}, 'Correspondence'));
+  if (!LET) body.append(el('p', { class: 'small' }, 'Fetching the post…'));
+  else if (!list.length) body.append(el('p', { class: 'small' }, 'No letters yet.'));
+  const seen = renderLetters.seen == null ? letSeen() : renderLetters.seen;
+  for (const l of list) {
+    const mine = l.from === V.me, head = mine ? `You to ${l.to === 'all' ? 'every army' : seatName(l.to)}` : `${seatName(l.from)} to ${l.to === 'all' ? 'every army' : 'you'}`;
+    body.append(el('div', { class: 'letter' + (mine ? ' mine' : '') + (!mine && l.id > seen ? ' new' : ''), style: `--c:${E.COLORS[l.from].ui}` },
+      el('div', { class: 'lh' }, el('b', {}, head), ` · ${E.dateOf(V, l.turn).label}`), el('div', { class: 'lt' }, l.text)));
+  }
+  if (api.notes) {
+    body.append(el('h4', {}, 'Your notebook'), el('p', { class: 'small' }, 'Plans, promises and grudges. Only this army\'s link can read it.'));
+    const nb = el('textarea', { class: 'letterbox', rows: 6, maxlength: 20000, placeholder: NOTE === null ? 'Opening the notebook…' : 'Nothing written yet.' }); if (NOTE !== null) nb.value = NOTE;
+    const save = el('button', { onclick: async () => { try { await api.saveNotes(nb.value); NOTE = nb.value; setStatus('Notebook saved.'); } catch (e) { setStatus(e.message); } } }, 'Save notebook');
+    body.append(nb, save);
+    if (NOTE === null) api.notes().then(j => { NOTE = j.text || ''; if (tab === 'letters') { nb.value = NOTE; nb.placeholder = 'Nothing written yet.'; } }).catch(() => { });
+  }
 }
 function dipl() { const d = orders.diplo || (orders.diplo = { sight: V.rel.sight[V.me].slice(), passage: V.rel.passage[V.me].slice(), gift: [] }); for (const f of ['offer', 'accept', 'decline', 'withdraw']) if (!Array.isArray(d[f])) d[f] = []; return d; }
 function lockLine(l) { return l.until <= V.turn ? `runs out after this month; it can be withdrawn now` : `fixed until the orders for ${E.dateOf(V, l.until).label}`; }
@@ -617,7 +662,7 @@ function applyView(nv) {
 }
 async function poll() {
   if (!api.status) return;
-  try { const s = await api.status(); if (s.turn !== V.turn) { const nv = await api.load(); applyView(nv); startReplay(); } else if (JSON.stringify(s.submitted) !== JSON.stringify(V.submittedSeats)) { V.submittedSeats = s.submitted; renderTop(); } } catch (e) { }
+  try { const s = await api.status(); if (api.letters && (s.lastLetter || 0) > lastLetterId()) loadLetters(); if (s.turn !== V.turn) { const nv = await api.load(); applyView(nv); startReplay(); } else if (JSON.stringify(s.submitted) !== JSON.stringify(V.submittedSeats)) { V.submittedSeats = s.submitted; renderTop(); } } catch (e) { }
 }
 async function boot(backend) {
   api = backend;
@@ -632,6 +677,7 @@ async function boot(backend) {
   if (seen && seen < v.turn) startReplay();
   try { localStorage.setItem('tlc-seen-' + (v.id || 'local') + '-' + v.me, v.turn); } catch (e) { }
   requestAnimationFrame(draw);
+  loadLetters();
   setInterval(tickClock, 15000);
   if (api.status) setInterval(poll, 45000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });

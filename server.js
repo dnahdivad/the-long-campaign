@@ -151,11 +151,37 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { id, name: doc.state.name, turn: doc.state.turn, date: E.dateOf(doc.state, doc.state.turn).label, status: doc.status, deadline: doc.deadline, hours: doc.hours, links: links(doc), submitted: doc.state.seats.map(s => s.bot || !!doc.orders[s.seat]) });
     }
     // a player's view, orders and joining
-    m = p.match(/^\/api\/play\/([\w.-]+)(\/orders|\/join|\/status)?$/);
+    m = p.match(/^\/api\/play\/([\w.-]+)(\/orders|\/join|\/status|\/letters|\/notes)?$/);
     if (m) {
       const id = gameIdOf(m[1]); const doc0 = await tickCampaign(id); if (!doc0) return send(res, 404, { error: 'No such campaign' });
       const seat = seatOf(doc0, m[1]); if (seat < 0) return send(res, 404, { error: 'That link is not part of this campaign' });
-      if (m[2] === '/status') return send(res, 200, { turn: doc0.state.turn, deadline: doc0.deadline, status: doc0.status, submitted: doc0.state.seats.map(s => s.bot || !!doc0.orders[s.seat]) });
+      if (m[2] === '/status') { const mine = lettersFor(doc0, seat); return send(res, 200, { turn: doc0.state.turn, deadline: doc0.deadline, status: doc0.status, submitted: doc0.state.seats.map(s => s.bot || !!doc0.orders[s.seat]), lastLetter: mine.length ? mine[mine.length - 1].id : 0 }); }
+      // letters: the server stamps who sent them, so nobody can write in another army's name
+      if (m[2] === '/letters' && req.method === 'GET') return send(res, 200, { me: seat, letters: lettersFor(doc0, seat) });
+      if (m[2] === '/letters' && req.method === 'POST') {
+        const body = await readBody(req);
+        const text = cleanText(body.text, LETTER.max);
+        if (!text) return send(res, 400, { error: 'The letter is blank.' });
+        const out = await withLock(id, async () => {
+          const d = await Store.get(id); const st = d.state;
+          const to = body.to === 'all' ? 'all' : Number.isInteger(body.to) ? body.to : -1;
+          if (to !== 'all' && (to < 0 || to >= st.n || to === seat || st.seats[to].bot)) throw new Error('There is nobody at that address to read it.');
+          d.letters = d.letters || []; d.nextLetter = d.nextLetter || 1;
+          if (d.letters.filter(l => l.from === seat && l.turn === st.turn).length >= LETTER.perMonth) throw new Error(`The courier will carry only ${LETTER.perMonth} letters a month.`);
+          d.letters.push({ id: d.nextLetter++, from: seat, to, turn: st.turn, at: Date.now(), text });
+          if (d.letters.length > LETTER.keep) d.letters = d.letters.slice(-LETTER.keep);
+          await Store.put(id, d); return d;
+        });
+        return send(res, 200, { me: seat, letters: lettersFor(out, seat) });
+      }
+      // a private notebook: only this army's own link can read or write it
+      if (m[2] === '/notes' && req.method === 'GET') return send(res, 200, { text: (doc0.notes || {})[seat] || '' });
+      if (m[2] === '/notes' && req.method === 'POST') {
+        const body = await readBody(req);
+        const text = cleanText(body.text, NOTES.max, true);
+        await withLock(id, async () => { const d = await Store.get(id); d.notes = d.notes || {}; d.notes[seat] = text; await Store.put(id, d); });
+        return send(res, 200, { ok: true, length: text.length });
+      }
       if (req.method === 'POST' && m[2] === '/join') {
         const body = await readBody(req);
         const out = await withLock(id, async () => { const d = await Store.get(id); const s = d.state.seats[seat]; s.name = String(body.name || '').trim().slice(0, 32) || s.name || `${E.COLORS[seat].name} Army`; s.joined = true; d.emails[seat] = String(body.email || '').trim().slice(0, 120); await Store.put(id, d); return d; });
@@ -181,6 +207,11 @@ const server = http.createServer(async (req, res) => {
     notFound(res);
   } catch (e) { console.error(e); send(res, e.code === 409 ? 409 : 400, { error: e.message || 'Something went wrong' }); }
 });
+/* ---------------- letters and notebooks ---------------- */
+const LETTER = { max: 1000, perMonth: 30, keep: 600 }, NOTES = { max: 20000 };
+// plain text only: no control characters, no runs of blank lines
+function cleanText(t, max, keepBlank) { let x = String(t == null ? '' : t).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ''); if (!keepBlank) x = x.replace(/\n{3,}/g, '\n\n').trim(); return x.slice(0, max); }
+function lettersFor(doc, seat) { return (doc.letters || []).filter(l => l.from === seat || l.to === seat || l.to === 'all'); }
 function view(doc, seat) { const v = E.view(doc.state, seat); v.deadline = doc.deadline; v.hours = doc.hours; v.status = doc.status; v.myOrders = doc.orders[seat] || null; v.submittedSeats = doc.state.seats.map(s => s.bot || !!doc.orders[s.seat]); return v; }
 // resolve overdue turns even when nobody visits
 setInterval(async () => { try { for (const id of await Store.list()) await tickCampaign(id); } catch (e) { console.warn(e.message); } }, 60e3).unref();

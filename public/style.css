@@ -138,3 +138,14 @@ button.army { border-left: 8px solid var(--c); }
   .modal p { font-size: 14px; }
   .zoom button { width: 32px; height: 32px; font-size: 17px; }
 }
+
+/* letters and the notebook */
+.tabs .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #b8322a; margin-left: 4px; vertical-align: 2px; }
+.compose { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.compose select { margin-left: 4px; }
+.letterbox { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; padding: 6px; resize: vertical; }
+.letter { border-left: 4px solid var(--c); padding: 5px 8px; margin: 6px 0; background: rgba(255,255,255,0.35); }
+.letter.mine { opacity: 0.85; }
+.letter.new { box-shadow: inset 0 0 0 1.5px #b8322a; }
+.letter .lh { font-size: 12px; margin-bottom: 3px; }
+.letter .lt { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
