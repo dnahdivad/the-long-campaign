@@ -453,7 +453,7 @@ function renderTop() {
   const w = E.weatherAt(V.weather.fronts, me.hq);
   $('#top').innerHTML = '';
   $('#top').append(
-    el('div', { class: 'title' }, el('b', {}, V.name), el('span', { class: 'date' }, `${d.label} · turn ${V.turn}/${V.turnLimit} · ${E.ERAS[era].year === d.year ? '' : ''}${E.ERAS[Math.min(3, Math.floor((V.turn - 1) / V.eraTurns))].name}`)),
+    el('div', { class: 'title' }, el('b', {}, V.name), el('span', { class: 'date' }, `${d.label} · turn ${V.turn}/${V.turnLimit}`, el('span', { class: 'era' }, ` · ${E.ERAS[Math.min(3, Math.floor((V.turn - 1) / V.eraTurns))].name}`))),
     el('div', { class: 'res' }, el('span', { title: 'Recruits' }, `👥 ${me.men - spent.men}`), el('span', { title: 'Supply' }, `📦 ${me.sup - spent.sup}`), el('span', { title: 'Army size / limit' }, `⚔ ${myUnits}/${capOf()}`), el('span', { title: 'Victory points' }, `★ ${me.score}`)),
     el('div', { class: 'wx' }, wxChip('Now', w), ...(V.weather.forecast || []).map((f, i) => wxChip(E.dateOf(V, V.turn + 1 + i).label.split(' ')[0].slice(0, 3), dominantAround(f, me.hq), i))),
     el('div', { class: 'clock', id: 'clock' }, ''),

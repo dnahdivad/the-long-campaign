@@ -154,3 +154,21 @@ button.army { border-left: 8px solid var(--c); }
 .newsflash { text-align: center; border: 3px double var(--ink); }
 .newsflash .nf-tag { font-family: Rye, Georgia, serif; letter-spacing: 3px; text-transform: uppercase; color: #b8322a; font-size: 15px; }
 .newsflash h2 { font-family: Rye, Georgia, serif; font-size: 26px; margin: 8px 0; line-height: 1.15; }
+
+/* small phones: keep the map visible. The unit and recruit panels cover the tabs, not the map;
+   messages sit in a slim strip at the foot of the map; the top bar fits on two lines. */
+@media (max-width: 600px) {
+  #app { grid-template-rows: auto minmax(0, 1fr) 40vh; }
+  #top { gap: 2px 8px; padding: 3px 6px; }
+  #top .title b { display: none; }
+  #top .era { display: none; }
+  #top .date { font-size: 12.5px; }
+  #top .res { font-size: 13.5px; gap: 7px; }
+  #top .clock { font-size: 12.5px; }
+  .wxchip { padding: 1px 4px; font-size: 11.5px; }
+  .pdot { width: 16px; height: 16px; font-size: 9px; }
+  #unitpanel, #recruit { position: fixed; left: 0; right: 0; bottom: 0; max-width: none; max-height: 40vh; overflow-y: auto; border-radius: 0; border-width: 2px 0 0; box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.45); padding: 6px 8px 10px; }
+  #unitpanel .row button, #recruit .row button { padding: 6px 8px; font-size: 13.5px; }
+  #status { top: auto; bottom: 6px; left: 6px; right: 6px; transform: none; max-width: none; font-size: 13px; line-height: 1.3; padding: 4px 8px; max-height: 4.2em; overflow: hidden; pointer-events: none; }
+  .zoom { top: 6px; }
+}
