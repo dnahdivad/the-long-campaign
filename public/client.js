@@ -23,7 +23,8 @@ function pixToHex(px, py) {
 /* ---------------- colours ---------------- */
 const hex2 = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
 const SEASON_GRASS = { spring: ['#5a9a38', '#66a640', '#74b04a'], summer: ['#5e9a32', '#6aa63a', '#7ab244'], autumn: ['#8a9440', '#9a9e48', '#aaa654'], winter: ['#c4ccd0', '#d2d8da', '#e2e6e8'] };
-const PAL = i => i === E.NEUTRAL ? { c: '#6e6250', C: '#4e4434', l: '#8e8270', h: '#3a3024', H: '#2a2018', t: '#7a6a50', T: '#5e5038', ui: '#8a7a5a', name: 'Militia' } : E.COLORS[i];
+// militia wear undyed cream homespun with black hats, so they never look like any army
+const PAL = i => i === E.NEUTRAL ? { c: '#e6dcc2', C: '#b8ab8a', l: '#f6efdc', h: '#1e1810', H: '#0e0a06', t: '#c9b98f', T: '#a4956c', ui: '#cdbf9a', name: 'Militia' } : E.COLORS[i];
 const FLAGC = i => i === E.NEUTRAL ? '#e8e0cc' : E.COLORS[i].ui;
 
 /* ---------------- sprites (original pixel art) ---------------- */
@@ -223,7 +224,14 @@ function drawWeather(g, t) {
 let showForecast = false, forecastIdx = 0;
 
 /* ---------------- the replay of the last month ---------------- */
+function newsflash() {
+  const yr = /^1[89]\d\d: /; const line = (V.log || []).find(l => l.turn === V.turn - 1 && yr.test(l.text)); if (!line) return;
+  const key = 'tlc-news-' + (V.id || 'local') + '-' + V.me + '-' + line.turn; try { if (localStorage.getItem(key)) return; localStorage.setItem(key, 1); } catch (e) { }
+  const [head, ...rest] = line.text.split('. ');
+  showModal(el('div', { class: 'modal newsflash' }, el('div', { class: 'nf-tag' }, 'Newsflash'), el('h2', {}, head.toUpperCase()), el('p', {}, rest.join('. ')), el('button', { class: 'primary', onclick: closeModal }, 'Understood')));
+}
 function startReplay() {
+  newsflash();
   const evs = V.events || []; if (!evs.length) return;
   const moves = evs.filter(e => e.k === 'move'), flashes = [];
   let t = moves.length ? 2.2 : 0.2;
@@ -431,6 +439,7 @@ function describeHex(k) {
   const bits = [h.town ? `${h.town.name} (${E.KIND[h.town.kind].name}, ${h.town.owner === E.NEUTRAL ? 'held by militia' : 'held by ' + seatName(h.town.owner)}${h.town.fort ? ', fort ' + h.town.fort : ''})` : h.t === 'water' ? (h.bridge ? 'Bridge' : h.ford ? 'Ford (impassable in rain)' : 'River') : E.TER[h.t].name];
   if (h.farm) bits.push(h.farm.burned > 0 ? 'burned farm' : 'farm'); if (h.rail) bits.push(h.railBroken ? 'broken railway' : 'railway'); if (h.road) bits.push('road'); if (h.ent) bits.push('earthworks ' + h.ent); if (h.tower) bits.push(`${seatName(h.tower.seat)} watchtower`);
   bits.push(E.WEATHER[w].name.toLowerCase());
+  bits.unshift(`Hex ${k}`);
   if (u) bits.push(`${seatName(u.seat)} ${E.UNIT[u.type].name.toLowerCase()} (${u.str})`);
   setStatus(bits.join(' · ')); clearTimeout(toastT); toastT = setTimeout(() => setStatus(''), 4000);
 }
@@ -613,6 +622,7 @@ const RULES = `
 <p><b>Diplomacy.</b> Share your scouts' reports, grant free passage, or send recruits and supply to another army. A <i>handshake</i> costs nothing and can be withdrawn next month, and nothing makes the other side keep its word. A <i>binding deal</i> is offered one month and answered the next: if accepted, both sides hand over at the same moment and each pays the mediator 1 supply. If either side cannot pay, it falls through and nobody pays. Reports and passage promised in a deal are locked on for the months agreed.</p>
 <p><b>Cavalry</b> raid railways and farms. <b>Engineers</b> dig earthworks, fortify towns, bridge rivers, mend railways and build <b>watchtowers</b> (3 supply, outside towns, 4 per army): a tower sees 3 hexes (4 from a hill, 2 in fog), spots troops in woods 2 hexes off and reports troops coming into view. Another army ending its month on it burns it, unless you grant them passage; guns can shell it down. A <b>general</b> makes the units around him fight 15% better.</p>
 <p><b>Merging and garrisons.</b> Two weak units of the same kind standing side by side can merge: tap one, press Merge…, then tap the other (up to strength 10). To leave a garrison, give a unit a march, tap it again and choose how many men stay behind.</p>
+<p><b>Allies.</b> Free passage lets an ally's troops march through your lines and stand in your towns, but never take them. Guns fire at a <i>hex</i>, not a unit: if an ally moves into the hex you are shelling, they get hit (the dispatch says <i>Friendly fire!</i>). Tell your allies where you are shelling — tap any hex to see its number, e.g. <i>Hex 1,-1</i>.</p>
 <p><b>Hunger.</b> The Orders tab warns before you send orders if your supply will not cover upkeep, or if a unit will end the month out of supply (marked ! on the map).</p>`;
 function supportPlan(u, o) {
   const t = V.units[o.unit]; if (!t) return { text: 'back a unit you can no longer see' };
@@ -639,7 +649,22 @@ function showModal(box) { closeModal(); const m = el('div', { class: 'modalwrap'
 function closeModal() { const m = $('#modal'); if (m) m.remove(); }
 
 /* ---------------- talking to the server (or the local war) ---------------- */
+// who counts as a friend: anyone you share scouts or passage with, either way
+function isFriend(s) { if (s === V.me || s === E.NEUTRAL || s == null) return false; const r = V.rel; return !!(r.sight[s][V.me] || r.sight[V.me][s] || r.passage[s][V.me] || r.passage[V.me][s]); }
+function friendlyFireRisks() {
+  const occ = occupancy(), out = [];
+  for (const id in orders.units) { const o = orders.units[id], u = V.units[id]; if (!u) continue;
+    const hx = o.k === 'bombard' ? o.hex : o.k === 'move' && o.path && o.path.length ? o.path[o.path.length - 1] : null;
+    const t = hx && occ[hx]; if (t && isFriend(t.seat)) out.push(`${E.UNIT[u.type].name} ${o.k === 'bombard' ? 'shells' : 'marches on'} ${seatName(t.seat)} at hex ${hx}`); }
+  return out;
+}
 async function submit() {
+  const risks = friendlyFireRisks();
+  if (risks.length && !submit.ok) {
+    const box = el('div', { class: 'modal' }, el('h3', {}, 'That is your ally'), el('p', {}, 'These orders would hit an army you share scouts or passage with:'), el('ul', {}, ...risks.map(r => el('li', {}, r))),
+      el('div', { class: 'row wrap' }, el('button', { class: 'primary', onclick: () => closeModal() }, 'Go back'), el('button', { onclick: () => { closeModal(); submit.ok = true; submit().finally(() => { submit.ok = false; }); } }, 'Send anyway')));
+    return showModal(box);
+  }
   try {
     setStatus('Sending orders…');
     const prevTurn = V.turn;
@@ -674,7 +699,7 @@ async function boot(backend) {
   applyView(v);
   view.z = Math.max(2, Math.min(4, Math.floor(Math.min(canvas.clientWidth / MAPW, canvas.clientHeight / MAPH) * 2) / 2 * 1.6));
   const seen = (() => { try { return +localStorage.getItem('tlc-seen-' + (v.id || 'local') + '-' + v.me) || 0; } catch (e) { return 0; } })();
-  if (seen && seen < v.turn) startReplay();
+  if (seen && seen < v.turn) startReplay(); else newsflash();
   try { localStorage.setItem('tlc-seen-' + (v.id || 'local') + '-' + v.me, v.turn); } catch (e) { }
   requestAnimationFrame(draw);
   loadLetters();

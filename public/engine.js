@@ -752,7 +752,8 @@ E.resolve = function (state, ordersBySeat) {
     if (!t || t.seat === u.seat) { ev.push({ k: 'bombard', from: u.at, hex: o.hex, dmg: 0 }); continue; }
     const terr = h.town ? KIND[h.town.kind].def : TER[h.t] ? TER[h.t].def : 1;
     const dmg = Math.max(1, Math.round(UNIT.art.bombard * (u.str / 10) * (E.eraOf(state, u.seat) >= 1 ? 1.25 : 1) * (0.35 + R() * 0.4) / terr));
-    t.str -= dmg; ev.push({ k: 'bombard', from: u.at, hex: o.hex, dmg, text: `${uname(state, u)} shells ${uname(state, t)} (−${dmg}).` });
+    const ally = t.seat !== NEUTRAL && (state.rel.sight[t.seat][u.seat] || state.rel.sight[u.seat][t.seat] || state.rel.passage[t.seat][u.seat] || state.rel.passage[u.seat][t.seat]);
+    t.str -= dmg; ev.push({ k: 'bombard', from: u.at, hex: o.hex, dmg, text: `${ally ? 'Friendly fire! ' : ''}${uname(state, u)} shells ${uname(state, t)} (−${dmg}).` });
     if (t.str <= 0) kill(state, t, u.seat, ev);
   }
   // 4. battles: every march that ended against a hostile unit is an attack; supports join in
@@ -842,6 +843,8 @@ E.resolve = function (state, ordersBySeat) {
   for (const id in state.units) { const u = state.units[id], h = H[u.at]; if (!h.tower || u.seat === NEUTRAL || u.seat === h.tower.seat || state.rel.passage[h.tower.seat][u.seat]) continue; ev.push({ k: 'towerdown', hex: u.at, seat: h.tower.seat, text: `${uname(state, u)} burn${u.type === 'inf' || u.type === 'eng' ? '' : 's'} the ${nameOf(state, h.tower.seat)} watchtower ${hexName(state, u.at)}.` }); delete h.tower; }
   for (const id in state.units) {
     const u = state.units[id], h = H[u.at]; if (!h.town || u.seat === NEUTRAL || u.type === 'gen' || h.town.owner === u.seat) continue;
+    // free passage lets an ally march through your towns, not take them
+    if (h.town.owner !== NEUTRAL && state.rel.passage[h.town.owner] && state.rel.passage[h.town.owner][u.seat]) continue;
     const prev = h.town.owner; h.town.owner = u.seat;
     if (prev !== NEUTRAL && h.town.kind === 'hq' && state.seats[prev] && state.seats[prev].hq === u.at) state.seats[prev].stats.hqLost = true;
     ev.push({ k: 'capture', hex: u.at, seat: u.seat, from: prev, text: `${nameOf(state, u.seat)} take${h.town.kind === 'city' ? 's the Capital,' : 's'} ${h.town.name}${prev === NEUTRAL ? '' : ' from ' + nameOf(state, prev)}.` });

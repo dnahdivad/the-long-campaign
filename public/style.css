@@ -149,3 +149,8 @@ button.army { border-left: 8px solid var(--c); }
 .letter.new { box-shadow: inset 0 0 0 1.5px #b8322a; }
 .letter .lh { font-size: 12px; margin-bottom: 3px; }
 .letter .lt { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+
+/* era newsflash */
+.newsflash { text-align: center; border: 3px double var(--ink); }
+.newsflash .nf-tag { font-family: Rye, Georgia, serif; letter-spacing: 3px; text-transform: uppercase; color: #b8322a; font-size: 15px; }
+.newsflash h2 { font-family: Rye, Georgia, serif; font-size: 26px; margin: 8px 0; line-height: 1.15; }
